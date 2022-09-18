@@ -49,12 +49,11 @@ with st.sidebar.expander("Solar System Description",expanded = True):
         return moduleTypeChoices[option]
     moduleType = st.selectbox('Module Type',options=list(moduleTypeChoices.keys()),format_func=format_func_mod,index=0)
    
-    arrayTypeChoices = {0: "Fixed (open rack)", 2: "Fixed (roof mount)", 3: "1-Axis Tracking", 4: "1-Axis Backtracking", 5: "2-Axis Tracking"}
+    arrayTypeChoices = {0: "Fixed (open rack)", 1: "Fixed (roof mount)", 2: "1-Axis Tracking", 3: "1-Axis Backtracking", 4: "2-Axis Tracking"}
     def format_func_array(option):
         return arrayTypeChoices[option]
     arrayType = st.selectbox('Array Type',options=list(arrayTypeChoices.keys()),format_func=format_func_array,index=1)
    
-    #sysLossSelect = st.selectbox('System Loss Calc Method', ['Basic','Advanced'],index=0)
     sysLossSelect = st.checkbox('Advanced Loss Calc')
     
     if sysLossSelect:
@@ -95,7 +94,7 @@ def GetNRELData(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, 
     myAPIkey = "9zzEI7dNgn4vk8706ibfhr9XPbzn7eKXIGc3TgMp"
     df = pd.DataFrame()
     jsonRequestStr = "&address="+str(location)+"&system_capacity="+str(dcSysSize)+"&module_type="+str(moduleType)+"&array_type="+str(arrayType)+"&losses="+str(systemLosses)+"&tilt="+str(tilt)+"&azimuth="+str(azimuth)+"&dc_ac_ratio="+str(dcToACRatio)+"&gcr="+str(groundCovRatio)+"&inv_eff="+str(inverterEff)
-      
+    #jsonRequestStr = "&address="+str(location)+"&system_capacity="+str(dcSysSize)+"&module_type="+str(moduleType)+"&array_type="+str(arrayType)+"&losses="+str(systemLosses)+"&tilt="+str(tilt)+"&azimuth="+str(azimuth)+"&dc_ac_ratio="+str(dcToACRatio)+"&inv_eff="+str(inverterEff)  
     request = "https://developer.nrel.gov/api/pvwatts/v6.json?api_key="+myAPIkey+jsonRequestStr+"&timeframe=hourly"
     response = requests.get(request)
     df=pd.json_normalize(response.json(),max_level=1)
@@ -105,8 +104,8 @@ def GetNRELData(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, 
 def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio):
     global dfActivecase
     dfJson = GetNRELData(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio)
-    dfActivecase['%SolarGen']=dfJson.iloc[0,dfJson.columns.get_loc("outputs.ac")]
-    st.write(dfActivecase['%SolarGen'])
+    dfActivecase['SolarGen(w)']=dfJson.iloc[0,dfJson.columns.get_loc("outputs.ac")]
+    st.write(dfActivecase['SolarGen(w)'])
     return None
 
 #st.sidebar.button('Calculate Case',on_click=RunCase,args=(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth))

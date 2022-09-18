@@ -108,6 +108,8 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
     st.write(dfActivecase['SolarGen(w)'])
     return None
 
+st.write('hello world')
+
 #st.sidebar.button('Calculate Case',on_click=RunCase,args=(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth))
 if runcasebutton:
     RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio)

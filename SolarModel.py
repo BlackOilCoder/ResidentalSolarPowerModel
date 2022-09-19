@@ -158,14 +158,33 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
     dfActivecase['Solar Gen (kw)'] = dfJson.iloc[0,dfJson.columns.get_loc("outputs.ac")]
     dfActivecase['Solar Gen (kw)'] = dfActivecase['Solar Gen (kw)'] / 1000
 
-    #Calculate active case output colulmns based on location
+    #Calculate power saved from solar generation system - without considering battery
     conditions = [
         (dfActivecase['Solar Gen (kw)'] < dfActivecase['Hourly Pwr Consumption (kwh)']),
         (dfActivecase['Solar Gen (kw)'] > dfActivecase['Hourly Pwr Consumption (kwh)'])
     ]
     values = [dfActivecase['Solar Gen (kw)'], dfActivecase['Hourly Pwr Consumption (kwh)']]
-
     dfActivecase['Power Saved - Solar'] = np.select(conditions,values)
+    
+    #Calculate power sold back from solar generation system
+    conditions = [
+        (dfActivecase['Solar Gen (kw)'] > dfActivecase['Hourly Pwr Consumption (kwh)']),
+        (dfActivecase['Solar Gen (kw)'] < dfActivecase['Hourly Pwr Consumption (kwh)'])
+    ]
+    values = [dfActivecase['Solar Gen (kw)'] - dfActivecase['Hourly Pwr Consumption (kwh)'], 0]
+    dfActivecase['Power Sold - Solar'] = np.select(conditions,values)
+    #If a battery system is installed, then calculate battery energy delta per hour
+    if batteryInstalled:
+        #Calculate the hourly energy delta to battery
+        conditions = [
+        (dfActivecase['Power Sold - Solar'] > 0),
+        (dfActivecase['Power Sold - Solar'] <= 0)
+        ]
+        values = [dfActivecase['Power Sold - Solar'], dfActivecase['Solar Gen (kw)'] - dfActivecase['Hourly Pwr Consumption (kwh)']]
+        dfActivecase['Battery Delta Energy (kwh)'] = np.select(conditions,values)
+
+
+    
     st.write(dfActivecase)
     return dfActivecase
 

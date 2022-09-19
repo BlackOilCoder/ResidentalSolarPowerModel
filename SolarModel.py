@@ -5,12 +5,10 @@ Created on Fri Sep 16 21:29:51 2022
 @author: Matt Dionne mjdionne@gmail.com
 """
 
-from urllib.parse import DefragResult
 import pandas as pd
 import requests
 import streamlit as st
 import datetime
-import calendar
 import numpy as np  
 
 dfJson = pd.DataFrame()
@@ -210,6 +208,15 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
         values = [0, dfActivecase['Battery Storage'].shift(1).add(dfActivecase['Battery Delta Energy (kwh)']).sub(batterySize)]
         dfActivecase['Power Sold - Battery'] = np.select(conditions,values)
 
+    #Calculate nights and weekends if TOU is in play
+    if touFeatures != 'None':
+        dfActivecase['Pwr Saved - Free Nights'] = 0
+        conditions = [
+            ((dfActivecase['HourNum']>=nightStart.hour) | (dfActivecase['HourNum'] < nightEnd.hour)),
+            ((dfActivecase['HourNum']<nightStart.hour) | (dfActivecase['HourNum'] <= nightEnd.hour))
+        ]
+        value = [dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar']),0]
+        dfActivecase['Pwr Saved - Free Nights'] = np.select(conditions,value)
 
     st.write(dfActivecase)
     return dfActivecase

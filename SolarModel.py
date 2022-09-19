@@ -19,8 +19,6 @@ dfActivecase = pd.DataFrame()
 
 st.title('Texas Residential Solar Power System Modelling Tool')
 
-tab1, tab2, tab3 = st.tabs(['User Input', 'Rate of Return', 'Graphs'])
-
 st.sidebar.title('User Input')
 runcasebutton = st.sidebar.button('Run Case')
 st.sidebar.text_input('Case Name',value='Case 1',help='Enter a name for the modelled scenario')

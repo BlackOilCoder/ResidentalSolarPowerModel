@@ -87,15 +87,21 @@ with st.sidebar.expander("Electricity Plan Details",expanded = True):
         nightStart = st.time_input('Night Start Time', datetime.time(20,0))
         nightEnd = st.time_input('Night End Time', datetime.time(6,0))
     elif touFeatures == 'Free Weekends':
-        wkendDayStart = st.selectbox('Weekend Start',('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'),index=4)
-        wkendDayEnd = st.selectbox('Weekend End', ('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'),index=0)
+        wkDayTypeChoices = {1: "Sunday", 2: "Monday", 3: "Tuesday", 4: "Wednesday", 5:"Thursday", 6:"Friday",7:"Saturday"}
+        def format_func_wkDay(option):
+            return wkDayTypeChoices[option]
+        wkendDayStart = st.selectbox('Weekend Start',options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=5)
+        wkendDayEnd = st.selectbox('Weekend End', options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=1)
         wkendTimeStart = st.time_input('Weekend Start Time',datetime.time(20,0))
         wkendTimeEnd = st.time_input('Weekend End Time', datetime.time(6,0))
     elif touFeatures == 'Free Nights & Wk Ends':
         nightStart = st.time_input('Night Start Time', datetime.time(20,0))
         nightEnd = st.time_input('Night End Time', datetime.time(6,0))
-        wkendDayStart = st.selectbox('Weekend Start',('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'),index=4)
-        wkendDayEnd = st.selectbox('Weekend End',('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'),index=0)
+        wkDayTypeChoices = {1: "Sunday", 2: "Monday", 3: "Tuesday", 4: "Wednesday", 5:"Thursday", 6:"Friday",7:"Saturday"}
+        def format_func_wkDay(option):
+            return wkDayTypeChoices[option]
+        wkendDayStart = st.selectbox('Weekend Start',options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=5)
+        wkendDayEnd = st.selectbox('Weekend End', options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=1)
         wkendTimeStart = st.time_input('Weekend Start Time',datetime.time(20,0))
         wkendTimeEnd = st.time_input('Weekend End Time', datetime.time(6,0))
     elif touFeatures == 'Reduced Cost Nights':
@@ -209,14 +215,16 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
         dfActivecase['Power Sold - Battery'] = np.select(conditions,values)
 
     #Calculate nights and weekends if TOU is in play
-    if touFeatures != 'None':
-        dfActivecase['Pwr Saved - Free Nights'] = 0
+    if touFeatures == 'Free Nights' or touFeatures == 'Reduced Cost Nights':
+        dfActivecase['Pwr Saved - TOU'] = 0
         conditions = [
             ((dfActivecase['HourNum']>=nightStart.hour) | (dfActivecase['HourNum'] < nightEnd.hour)),
             ((dfActivecase['HourNum']<nightStart.hour) | (dfActivecase['HourNum'] <= nightEnd.hour))
         ]
         value = [dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar']),0]
-        dfActivecase['Pwr Saved - Free Nights'] = np.select(conditions,value)
+        dfActivecase['Pwr Saved - TOU'] = np.select(conditions,value)
+    #elif touFeatures == 'Free Weekends':
+
 
     st.write(dfActivecase)
     return dfActivecase

@@ -183,8 +183,16 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
         values = [dfActivecase['Power Sold - Solar'], dfActivecase['Solar Gen (kw)'] - dfActivecase['Hourly Pwr Consumption (kwh)']]
         dfActivecase['Battery Delta Energy (kwh)'] = np.select(conditions,values)
 
+        #Calculate the current energy storage in battery
+        dfActivecase['Battery Storage'] = 0
+        for i in range(1, len(dfActivecase)-1):
+            if dfActivecase.loc[i-1,'Battery Storage'] + dfActivecase.loc[i,'Battery Delta Energy (kwh)'] <= 0:
+                dfActivecase.loc[i,'Battery Storage'] = 0
+            elif dfActivecase.loc[i-1,'Battery Storage'] + dfActivecase.loc[i,'Battery Delta Energy (kwh)'] < batterySize:
+                dfActivecase.loc[i,'Battery Storage'] = dfActivecase.loc[i-1,'Battery Storage'] + (dfActivecase.loc[i,'Battery Delta Energy (kwh)'] * roundTripEff/100)
+            elif dfActivecase.loc[i-1,'Battery Storage'] + dfActivecase.loc[i,'Battery Delta Energy (kwh)'] > batterySize:
+                dfActivecase.loc[i,'Battery Storage'] = batterySize
 
-    
     st.write(dfActivecase)
     return dfActivecase
 

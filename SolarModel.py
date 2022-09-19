@@ -5,14 +5,16 @@ Created on Fri Sep 16 21:29:51 2022
 @author: Matt Dionne mjdionne@gmail.com
 """
 
+from urllib.parse import DefragResult
 import pandas as pd
 import requests
 import streamlit as st
 import datetime
+import calendar
+import numpy as np  
 
 dfJson = pd.DataFrame()
 dfFixeddata = pd.DataFrame()
-global dfActivecase
 dfActivecase = pd.DataFrame()
 
 #Setup the Streamlit Input
@@ -22,8 +24,8 @@ st.title('Texas Residential Solar Power System Modelling Tool')
 st.sidebar.title('User Input')
 runcasebutton = st.sidebar.button('Run Case')
 st.sidebar.text_input('Case Name',value='Case 1',help='Enter a name for the modelled scenario')
-#location = st.sidebar.text_input('ZIP code',value=77001)
-location = st.sidebar.selectbox('City',['Austin','Dallas','Houston','Midland','San Antonio'])
+location = st.sidebar.selectbox('City',['Austin','Dallas','Houston','Midland','San Antonio'],index=2)
+avgMonthElecConsump = st.sidebar.number_input('Average Monthly Electricity Consumption (kwh)',min_value=0, max_value=20000,value=1500,step=100)
 
 #Solar System Input
 with st.sidebar.expander("Solar System Description",expanded = True):
@@ -121,29 +123,56 @@ def GetNRELData(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, 
     df=pd.json_normalize(response.json(),max_level=1)
     return df
 
+#@st.cache
 def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio):
-    global dfActivecase
+    #fetch NREL solar data
     dfJson = GetNRELData(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio)
-    dfActivecase['SolarGen(w)']=dfJson.iloc[0,dfJson.columns.get_loc("outputs.ac")]
-    st.write(dfActivecase['SolarGen(w)'])
-    return None
-
-@st.cache
-def FixedDataSetup():
     
-    dfFixeddata['Date']=pd.date_range("2022-01-01",periods=(365*24),freq="H")
+    #fill index of the active case dataframe
+    dfActivecase['Date']=pd.date_range("2022-01-01",periods=(365*24),freq="H")
+    dfActivecase['MonthNum']=pd.DatetimeIndex(dfActivecase['Date']).month
+    dfActivecase['DayNum']=pd.DatetimeIndex(dfActivecase['Date']).day
+    dfActivecase['HourNum']=pd.DatetimeIndex(dfActivecase['Date']).hour
+    
+    #populate the monthly estimated electrical usage from historical data
+    dfResMonDelta = pd.DataFrame()
+    dfResMonDelta = pd.DataFrame(pd.read_csv('ResidentalMonthlyDelta2Mean.csv'))
+    dfResMonDelta['Delta2YrlyMean'] = dfResMonDelta['Delta2YrlyMean']*avgMonthElecConsump
+    dfResMonDelta['Delta2YrlyMean'] = dfResMonDelta['Delta2YrlyMean']+avgMonthElecConsump
+    
+    #Calculate estimated monthly power usage from annual average and populate active case dataframe
+    dfResMonDelta = dfResMonDelta.set_index('MonthNum')
+    dfActivecase['Monthly Pwr Consumption (kwh)'] = dfActivecase['MonthNum'].map(dfResMonDelta['Delta2YrlyMean'])
+    
+    #Calculate hourly power consumption from the location specific historical demand data
+    dfERCOTHourly = pd.DataFrame()
+    dfERCOTHourly['Hourly Use Change'] = pd.DataFrame(pd.read_csv('ERCOT_Demand.csv'), columns=[location])
+    dfERCOTHourly['MonthNum'] = pd.DatetimeIndex(dfActivecase['Date']).month
+    dfERCOTHourly['MonthDays'] = pd.to_datetime(dfERCOTHourly['MonthNum']).dt.daysinmonth
+    dfERCOTHourly['Monthly Pwr Consumption (kwh)'] = dfActivecase['Monthly Pwr Consumption (kwh)']
+    dfERCOTHourly['Hourly Use Change'] = 1 + dfERCOTHourly['Hourly Use Change']
+    dfERCOTHourly['Hourly Pwr Consumption (kwh)'] = dfERCOTHourly['Hourly Use Change'] * dfERCOTHourly['Monthly Pwr Consumption (kwh)'] / dfERCOTHourly['MonthDays'] / 24
+    dfActivecase['Hourly Pwr Consumption (kwh)'] = dfERCOTHourly['Hourly Pwr Consumption (kwh)']
 
-    dfFixeddata['MonthNum']=pd.DatetimeIndex(dfFixeddata['Date']).month
+    #Calculate the hourly solar power generation in kilowatts from the watt data output from the NREL request
+    dfActivecase['Solar Gen (kw)'] = dfJson.iloc[0,dfJson.columns.get_loc("outputs.ac")]
+    dfActivecase['Solar Gen (kw)'] = dfActivecase['Solar Gen (kw)'] / 1000
 
-    dfFixeddata['DayNum']=pd.DatetimeIndex(dfFixeddata['Date']).day
+    #Calculate active case output colulmns based on location
+    conditions = [
+        (dfActivecase['Solar Gen (kw)'] < dfActivecase['Hourly Pwr Consumption (kwh)']),
+        (dfActivecase['Solar Gen (kw)'] > dfActivecase['Hourly Pwr Consumption (kwh)'])
+    ]
+    values = [dfActivecase['Solar Gen (kw)'], dfActivecase['Hourly Pwr Consumption (kwh)']]
 
-    dfFixeddata['HourNum']=pd.DatetimeIndex(dfFixeddata['Date']).hour
-    return dfFixeddata
-
-dfFixeddata = FixedDataSetup()
+    dfActivecase['Power Saved - Solar'] = np.select(conditions,values)
+    st.write(dfActivecase)
+    return dfActivecase
 
 if runcasebutton:
-    RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio)
+    dfActivecase = RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio)
+
+
     
     
 

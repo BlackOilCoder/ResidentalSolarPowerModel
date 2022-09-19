@@ -194,15 +194,23 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
             elif dfActivecase.loc[i-1,'Battery Storage'] + dfActivecase.loc[i,'Battery Delta Energy (kwh)'] > batterySize:
                 dfActivecase.loc[i,'Battery Storage'] = batterySize
         
-        #Calculate power saved with solar and battery system
+        #Calculate power saved with solar + battery system
         conditions = [
-        (dfActivecase['Battery Storage'].shift(-1) < dfActivecase['Battery Storage']),
-        (dfActivecase['Battery Storage'].shift(-1) > dfActivecase['Battery Storage'])
+        (dfActivecase['Battery Storage'] < dfActivecase['Battery Storage'].shift(1)),
+        (dfActivecase['Battery Storage'] > dfActivecase['Battery Storage'].shift(1))
         ]
         values = [dfActivecase['Battery Storage'].shift(1).sub(dfActivecase['Battery Storage']), 0]
-        #dfActivecase['Power Sold - Battery'] = dfActivecase['Battery Storage'].shift(1).sub(dfActivecase['Battery Storage'])
+        dfActivecase['Power Saved - Battery'] = np.select(conditions,values)
+
+        #Calculate power sold with solar + battery system
+        conditions = [
+            (dfActivecase['Battery Storage'].shift(1).add(dfActivecase['Battery Delta Energy (kwh)']) <= batterySize),
+            (dfActivecase['Battery Storage'].shift(1).add(dfActivecase['Battery Delta Energy (kwh)']) > batterySize)
+        ]
+        values = [0, dfActivecase['Battery Storage'].shift(1).add(dfActivecase['Battery Delta Energy (kwh)']).sub(batterySize)]
         dfActivecase['Power Sold - Battery'] = np.select(conditions,values)
-        
+
+
     st.write(dfActivecase)
     return dfActivecase
 

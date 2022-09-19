@@ -69,7 +69,13 @@ with st.sidebar.expander("Solar System Description",expanded = True):
         dcToACRatio = 1.2
         inverterEff = 96.0
         groundCovRatio = 0.4
-    
+#Battery System Setup
+    batteryInstalled = st.checkbox("Include Battery?")
+    if batteryInstalled:
+        batterySize = st.number_input('Battery Size (kwh)',min_value=(0.1), max_value=(500.0),value=13.5,step=0.1)
+        roundTripEff = st.number_input('Round Trip Efficiency (%)',min_value=(0.0),max_value=(100.0),value=92.5,step=0.1)
+
+
 #Electric Conctract Setup
 with st.sidebar.expander("Electricity Plan Details",expanded = True):
     energyCharge = st.number_input('Energy Charge ($/kwh)',min_value=(0.00),max_value=(100.00),value=0.100,format="%.3f")
@@ -110,7 +116,6 @@ def GetNRELData(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, 
     myAPIkey = "9zzEI7dNgn4vk8706ibfhr9XPbzn7eKXIGc3TgMp"
     df = pd.DataFrame()
     jsonRequestStr = "&address="+str(location)+"&system_capacity="+str(dcSysSize)+"&module_type="+str(moduleType)+"&array_type="+str(arrayType)+"&losses="+str(systemLosses)+"&tilt="+str(tilt)+"&azimuth="+str(azimuth)+"&dc_ac_ratio="+str(dcToACRatio)+"&gcr="+str(groundCovRatio)+"&inv_eff="+str(inverterEff)
-    #jsonRequestStr = "&address="+str(location)+"&system_capacity="+str(dcSysSize)+"&module_type="+str(moduleType)+"&array_type="+str(arrayType)+"&losses="+str(systemLosses)+"&tilt="+str(tilt)+"&azimuth="+str(azimuth)+"&dc_ac_ratio="+str(dcToACRatio)+"&inv_eff="+str(inverterEff)  
     request = "https://developer.nrel.gov/api/pvwatts/v6.json?api_key="+myAPIkey+jsonRequestStr+"&timeframe=hourly"
     response = requests.get(request)
     df=pd.json_normalize(response.json(),max_level=1)

@@ -5,6 +5,7 @@ Created on Fri Sep 16 21:29:51 2022
 @author: Matt Dionne mjdionne@gmail.com
 """
 
+from tarfile import DEFAULT_FORMAT
 import pandas as pd
 import requests
 import streamlit as st
@@ -219,9 +220,8 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
     if touFeatures == 'Free Nights' or touFeatures == 'Reduced Cost Nights':
         conditions = [
             ((dfActivecase['HourNum']>=nightStart.hour) | (dfActivecase['HourNum'] < nightEnd.hour)),
-            ((dfActivecase['HourNum']<nightStart.hour) | (dfActivecase['HourNum'] <= nightEnd.hour))
         ]
-        value = [dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved']),0]
+        value = [dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved'])]
         dfActivecase['Pwr Saved - TOU'] = np.select(conditions,value)
     elif touFeatures == 'Free Weekends':
         dfActivecase['Week Day #'] = pd.DatetimeIndex(dfActivecase['Date']).weekday
@@ -242,9 +242,8 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
             (dfActivecase['Week Day #'] < wkendDayEnd),
             ((dfActivecase['Week Day #'] == wkendDayEnd) & (dfActivecase['HourNum']< wkendTimeEnd.hour)),
             ((dfActivecase['HourNum']>=nightStart.hour) | (dfActivecase['HourNum'] < nightEnd.hour)),
-            ((dfActivecase['HourNum']<nightStart.hour) | (dfActivecase['HourNum'] <= nightEnd.hour))
         ]
-        value = [dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved']), dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved']),dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved']),dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved']),dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved']),0]
+        value = [dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved']), dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved']),dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved']),dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved']),dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved'])]
         dfActivecase['Pwr Saved - TOU'] = np.select(conditions,value)
         dfActivecase.drop('Week Day #', axis=1, inplace = True)
 

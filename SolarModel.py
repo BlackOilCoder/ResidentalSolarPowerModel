@@ -218,9 +218,62 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
 
     #Calculate time of use (TOU) power saved if electrical plan features include
     dfActivecase['Pwr Saved - TOU'] = 0 # initialize power saved column to 0 for ease of future NPV calcs (always have the data available even if at 0)
+    #Calculate TOU power if battery is installed - which needs to account for the power saved by the battery - but only if it has available energy.
     if batteryInstalled:
-        #With the battery installed there's another conditional to check.
-        foo=1
+        if touFeatures == 'Free Nights' or touFeatures == 'Reduced Cost Nights':
+            conditions = [
+                ((dfActivecase['HourNum']>=nightStart.hour) | (dfActivecase['HourNum'] < nightEnd.hour) &
+                    (dfActivecase['Battery Storage'] > dfActivecase['Hourly Pwr Consumption (kwh)'])),
+                ((dfActivecase['HourNum']>=nightStart.hour) | (dfActivecase['HourNum'] < nightEnd.hour) &
+                    (dfActivecase['Battery Storage'] <= dfActivecase['Hourly Pwr Consumption (kwh)']))
+            ]
+            value = [dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar']),
+                dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar']).sub(dfActivecase['Power Saved - Battery'])
+            ]
+            dfActivecase['Pwr Saved - TOU'] = np.select(conditions,value)
+        
+        elif touFeatures == 'Free Weekends':
+            dfActivecase['Week Day #'] = pd.DatetimeIndex(dfActivecase['Date']).weekday
+            conditions = [
+                ((dfActivecase['Week Day #'] == wkendDayStart) & (dfActivecase['HourNum']>=wkendTimeStart.hour)) |
+                    (dfActivecase['Week Day #'] > wkendDayStart) |
+                    (dfActivecase['Week Day #'] < wkendDayEnd) |
+                    ((dfActivecase['Week Day #'] == wkendDayEnd) & (dfActivecase['HourNum']< wkendTimeEnd.hour) &
+                    (dfActivecase['Battery Storage'] > dfActivecase['Hourly Pwr Consumption (kwh)'])),
+                ((dfActivecase['Week Day #'] == wkendDayStart) & (dfActivecase['HourNum']>=wkendTimeStart.hour)) |
+                    (dfActivecase['Week Day #'] > wkendDayStart) |
+                    (dfActivecase['Week Day #'] < wkendDayEnd) |
+                    ((dfActivecase['Week Day #'] == wkendDayEnd) & (dfActivecase['HourNum']< wkendTimeEnd.hour) &
+                    (dfActivecase['Battery Storage'] <= dfActivecase['Hourly Pwr Consumption (kwh)'])),
+            ]
+            value = [dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar']),
+                dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar']).sub(dfActivecase['Power Saved - Battery'])
+            ]
+            dfActivecase['Pwr Saved - TOU'] = np.select(conditions,value)
+            dfActivecase.drop('Week Day #', axis=1, inplace = True)
+        
+        elif touFeatures == 'Free Nights & Wk Ends':
+            dfActivecase['Week Day #'] = pd.DatetimeIndex(dfActivecase['Date']).weekday
+            conditions = [
+                ((dfActivecase['Week Day #'] == wkendDayStart) & (dfActivecase['HourNum']>=wkendTimeStart.hour)) |
+                    (dfActivecase['Week Day #'] > wkendDayStart) |
+                    (dfActivecase['Week Day #'] < wkendDayEnd) |
+                    ((dfActivecase['Week Day #'] == wkendDayEnd) & (dfActivecase['HourNum']< wkendTimeEnd.hour)) |
+                    ((dfActivecase['HourNum']>=nightStart.hour) | (dfActivecase['HourNum'] < nightEnd.hour) &
+                    (dfActivecase['Battery Storage'] > dfActivecase['Hourly Pwr Consumption (kwh)'])),
+                ((dfActivecase['Week Day #'] == wkendDayStart) & (dfActivecase['HourNum']>=wkendTimeStart.hour)) |
+                    (dfActivecase['Week Day #'] > wkendDayStart) |
+                    (dfActivecase['Week Day #'] < wkendDayEnd) |
+                    ((dfActivecase['Week Day #'] == wkendDayEnd) & (dfActivecase['HourNum']< wkendTimeEnd.hour)) |
+                    ((dfActivecase['HourNum']>=nightStart.hour) | (dfActivecase['HourNum'] < nightEnd.hour) &
+                    (dfActivecase['Battery Storage'] <= dfActivecase['Hourly Pwr Consumption (kwh)'])),
+            ]
+            value = [dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar']),
+                dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar']).sub(dfActivecase['Power Saved - Battery'])
+            ]
+            dfActivecase['Pwr Saved - TOU'] = np.select(conditions,value)
+            dfActivecase.drop('Week Day #', axis=1, inplace = True)
+    #Calculate TOU power saved if no battery - consumption - power saved with solar.
     else:
         if touFeatures == 'Free Nights' or touFeatures == 'Reduced Cost Nights':
             conditions = [
@@ -228,6 +281,7 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
             ]
             value = [dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar'])]
             dfActivecase['Pwr Saved - TOU'] = np.select(conditions,value)
+        
         elif touFeatures == 'Free Weekends':
             dfActivecase['Week Day #'] = pd.DatetimeIndex(dfActivecase['Date']).weekday
             conditions = [
@@ -239,6 +293,7 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
             value = [dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar'])]
             dfActivecase['Pwr Saved - TOU'] = np.select(conditions,value)
             dfActivecase.drop('Week Day #', axis=1, inplace = True)
+       
         elif touFeatures == 'Free Nights & Wk Ends':
             dfActivecase['Week Day #'] = pd.DatetimeIndex(dfActivecase['Date']).weekday
             conditions = [
@@ -251,6 +306,12 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
             value = [dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar'])]
             dfActivecase['Pwr Saved - TOU'] = np.select(conditions,value)
             dfActivecase.drop('Week Day #', axis=1, inplace = True)
+
+    #Import the real time market (RTM) pricing data developed from 2020 - 2022 ERCOT load zone RTM data
+    dfActivecase['RTM Price'] = pd.DataFrame(pd.read_csv('RTMprices-Texas.csv'), columns=[location])
+    dfActivecase['Pwr Sold Value - Solar'] = dfActivecase['RTM Price'].multiply(dfActivecase['Power Sold - Solar'])
+    dfActivecase['Pwr Sold Value - Battery'] = dfActivecase['RTM Price'].multiply(dfActivecase['Power Sold - Battery'])
+    dfActivecase.drop('RTM Price', axis=1, inplace = True)
 
     st.write(dfActivecase)
     return dfActivecase

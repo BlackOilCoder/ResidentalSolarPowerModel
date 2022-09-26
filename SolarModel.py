@@ -4,7 +4,6 @@ Created on Fri Sep 16 21:29:51 2022
 
 @author: Matt Dionne mjdionne@gmail.com
 """
-
 import pandas as pd
 import requests
 import streamlit as st
@@ -12,6 +11,7 @@ import datetime
 import numpy as np
 import calendar
 import altair as alt
+from decimal import Decimal
 
 dfJson = pd.DataFrame()
 dfFixeddata = pd.DataFrame()
@@ -123,11 +123,6 @@ with tab1: #Tab 1 is the solar system main calculation tab where results on the 
             wkendDayEnd = 'Monday'
             wkendTimeStart = datetime.time(20,0)
  
-#with tab2: #Tab2 is for the NPV inputs and to calculate and display NPV data
-
-#    runNPV = st.button("Run NPV and Rate of Return Calc")
-
-
 
 
 #NREL request building
@@ -143,6 +138,7 @@ def GetNRELData(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, 
 
 
 def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio, year, energyInf, panelDeg):
+    global dfActivecase
     #fetch NREL solar data
     dfJson = GetNRELData(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio)
     
@@ -151,26 +147,43 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
     dfActivecase['MonthNum']=pd.DatetimeIndex(dfActivecase['Date']).month
     dfActivecase['DayNum']=pd.DatetimeIndex(dfActivecase['Date']).day
     dfActivecase['HourNum']=pd.DatetimeIndex(dfActivecase['Date']).hour
+    dfActivecase['WeekDayNum']=pd.DatetimeIndex(dfActivecase['Date']).dayofweek
     
-    #populate the monthly estimated electrical usage from historical data
+    #populate the monthly estimated electrical usage from historical data - using some Austin Energy data found
     dfResMonDelta = pd.DataFrame()
+    #   Read in baked data that has the estimate delta to the annual average consumption on a monthly basis
     dfResMonDelta = pd.DataFrame(pd.read_csv('ResidentalMonthlyDelta2Mean.csv'))
-    dfResMonDelta['Delta2YrlyMean'] = dfResMonDelta['Delta2YrlyMean']*avgMonthElecConsump
-    dfResMonDelta['Delta2YrlyMean'] = dfResMonDelta['Delta2YrlyMean']+avgMonthElecConsump
-    
+    dfResMonDelta['Monthly Consumption'] = dfResMonDelta['Delta2YrlyMean']*avgMonthElecConsump+avgMonthElecConsump
+
     #Calculate estimated monthly power usage from annual average and populate active case dataframe
     dfResMonDelta = dfResMonDelta.set_index('MonthNum')
-    dfActivecase['Monthly Pwr Consumption (kwh)'] = dfActivecase['MonthNum'].map(dfResMonDelta['Delta2YrlyMean'])
+    dfActivecase['Monthly Pwr Consumption (kwh)'] = dfActivecase['MonthNum'].map(dfResMonDelta['Monthly Consumption'])
     
-    #Calculate hourly power consumption from the location specific historical demand data
+    #Calculate hourly power consumption from the location specific historical demand data (ERCOT only for now)
+    #   Map the ERCOT zones to the cities in selection list
+    ZoneMap = {
+        "Houston":"COAST",
+        "Austin":"SCENT",
+        "Dallas":"NCENT",
+        "San Antonio":"SCENT",
+        "Midland":"FWEST"
+    }
+    ZoneLocation = ZoneMap[location]
+    
+    #   Read in the baked ERCOT historical data based on month and day of week averages
     dfERCOTHourly = pd.DataFrame()
-    dfERCOTHourly['Hourly Use Change'] = pd.DataFrame(pd.read_csv('ERCOT_Demand.csv'), columns=[location])
-    dfERCOTHourly['MonthNum'] = pd.DatetimeIndex(dfActivecase['Date']).month
-    dfERCOTHourly['MonthDays'] = pd.to_datetime(dfERCOTHourly['MonthNum']).dt.daysinmonth
-    dfERCOTHourly['Monthly Pwr Consumption (kwh)'] = dfActivecase['Monthly Pwr Consumption (kwh)']
-    dfERCOTHourly['Hourly Use Change'] = 1 + dfERCOTHourly['Hourly Use Change']
-    dfERCOTHourly['Hourly Pwr Consumption (kwh)'] = dfERCOTHourly['Hourly Use Change'] * dfERCOTHourly['Monthly Pwr Consumption (kwh)'] / dfERCOTHourly['MonthDays'] / 24
-    dfActivecase['Hourly Pwr Consumption (kwh)'] = dfERCOTHourly['Hourly Pwr Consumption (kwh)']
+    dfERCOTHourly = pd.DataFrame(pd.read_csv('ERCOT_Demand_NEW.csv'), columns=['Month','WeekDayNum','Day','Hour',ZoneLocation])
+    #   Calculate the number of days in the month so that the user input monthly averages can be converted to hourly averages for hourly consumption estimate calculation
+    dfERCOTHourly['MonthDays'] = pd.to_datetime(dfERCOTHourly['Month']).dt.daysinmonth
+    #   Look up the monthly consumption data and apply it to all rows in that month for later calculation of hourly consumption
+    dfERCOTHourly['Monthly Pwr Consumption (kwh)'] = dfERCOTHourly['Month'].map(dfResMonDelta['Monthly Consumption'])
+    dfERCOTHourly[ZoneLocation] = 1 + dfERCOTHourly[ZoneLocation]
+    dfERCOTHourly['Hourly Pwr Consumption (kwh)'] = dfERCOTHourly[ZoneLocation] * dfERCOTHourly['Monthly Pwr Consumption (kwh)'] / dfERCOTHourly['MonthDays'] / 24
+    #   Merge the ERCOT Hourly by day of week data to the activecase dataframe to map the monthly day of week consumptions to a yearly datum
+    #  - i.e. all weekdays in the same month have the same consumption profile
+    #   drop the unused Month and Hour columns
+    dfActivecase = pd.merge(dfActivecase,dfERCOTHourly[['Month','WeekDayNum','Hour','Hourly Pwr Consumption (kwh)']], left_on = ['MonthNum','WeekDayNum','HourNum'],right_on=['Month','WeekDayNum','Hour'])
+    dfActivecase = dfActivecase.drop(['Month','Hour'], axis = 1)
 
     #Calculate the hourly solar power generation in kilowatts from the watt data output from the NREL request
     dfActivecase['Solar Gen (kw)'] = dfJson.iloc[0,dfJson.columns.get_loc("outputs.ac")]
@@ -327,6 +340,23 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
 
     dfActivecase.drop('RTM Price', axis=1, inplace = True)
 
+    #Summarize the Power Saved and Power Sold columns
+    if batteryInstalled:
+        dfActivecase['Power Sold Value'] = dfActivecase['Pwr Sold Value - Battery']
+        dfActivecase['Power Saved'] = dfActivecase['Power Saved - Battery'] + dfActivecase['Power Saved - Solar']
+        dfActivecase['Power Sold'] = dfActivecase['Power Sold - Battery']
+        dfActivecase = dfActivecase.drop(['Pwr Sold Value - Solar','Pwr Sold Value - Battery'], axis =1)
+        dfActivecase = dfActivecase.drop(['Power Saved - Solar','Power Saved - Battery'], axis = 1)
+        dfActivecase = dfActivecase.drop(['Power Sold - Solar', 'Power Sold - Battery'], axis = 1)
+
+    else:
+        dfActivecase['Power Sold Value'] = dfActivecase['Pwr Sold Value - Solar']
+        dfActivecase['Power Saved'] = dfActivecase['Power Saved - Solar']
+        dfActivecase['Power Sold'] = dfActivecase['Power Sold - Solar']
+        dfActivecase = dfActivecase.drop('Pwr Sold Value - Solar', axis =1)
+        dfActivecase = dfActivecase.drop('Power Saved - Solar', axis = 1)
+        dfActivecase = dfActivecase.drop('Power Sold - Solar', axis = 1)
+
     return dfActivecase
 
 def CalcNPV ():
@@ -336,11 +366,22 @@ def CalcNPV ():
 
 if runcasebutton:
     dfActivecase = RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio, 1, 1, 1)
-
     dfResultDisp = pd.DataFrame()
-    dfResultDisp = dfActivecase.groupby(['MonthNum'], as_index=False)['Solar Gen (kw)'].sum()
+    dfResultDisp = dfActivecase.groupby(['MonthNum'], as_index=False)['Solar Gen (kw)','Power Saved','Power Sold','Power Sold Value'].sum()
     d = dict(enumerate(calendar.month_abbr))
     dfResultDisp['Month'] = dfResultDisp['MonthNum'].map(d)
     st.metric('Total Yearly Solar Power Generated',str(int(round(dfResultDisp['Solar Gen (kw)'].sum(),0)))+' kwh',delta=None)
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric('Power Saved',str(int(round(dfResultDisp['Power Saved'].sum(),0)))+' kwh',delta=None)
+    with col2:
+        st.metric('Power Sold',str(int(round(dfResultDisp['Power Sold'].sum(),0)))+' kwh',delta=None)
+    with col3:
+        st.metric('Value of Power Sold',"$" + str(round(Decimal(dfResultDisp['Power Sold Value'].sum()),2)),delta=None)
     c = alt.Chart(dfResultDisp).mark_bar().encode(x=alt.X('Month',sort=dfResultDisp['MonthNum'].values),y='Solar Gen (kw)')
     st.altair_chart(c, use_container_width=True)
+
+with tab2: #Tab2 is for the NPV inputs and to calculate and display NPV data
+
+    foo=1
+#    runNPV = st.button("Run NPV and Rate of Return Calc")

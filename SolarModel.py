@@ -10,6 +10,8 @@ import requests
 import streamlit as st
 import datetime
 import numpy as np
+import calendar
+import altair as alt
 
 dfJson = pd.DataFrame()
 dfFixeddata = pd.DataFrame()
@@ -19,104 +21,114 @@ dfActivecase = pd.DataFrame()
 
 #Streamlit Main Area Setup
 st.title('Texas Residential Solar Power System Modelling Tool')
-runcasebutton = st.button('Run Case')
+tab1, tab2 = st.tabs(["Solar Power System Calculations", "NPV and Rate of Return Calculations"])
 
-#Streamlit Sidebar Setup
-st.sidebar.title('User Input')
-st.sidebar.text_input('Case Name',value='Case 1',help='Enter a name for the modelled scenario')
-location = st.sidebar.selectbox('City',['Austin','Dallas','Houston','Midland','San Antonio'],index=2)
-avgMonthElecConsump = st.sidebar.number_input('Average Monthly Electricity Consumption (kwh)',min_value=0, max_value=20000,value=1500,step=100)
+with tab1: #Tab 1 is the solar system main calculation tab where results on the base solar power system are shown
 
-#Solar System Input
-with st.sidebar.expander("Solar System Description",expanded = True):
-    dcSysSize = st.number_input('DC System Size (kW)',min_value=(0),max_value=(50),value=8)
-   
-    moduleTypeChoices = {0: "Standard", 2: "Premium", 3: "Thin Film"}
-    def format_func_mod(option):
-        return moduleTypeChoices[option]
-    moduleType = st.selectbox('Module Type',options=list(moduleTypeChoices.keys()),format_func=format_func_mod,index=0)
-   
-    arrayTypeChoices = {0: "Fixed (open rack)", 1: "Fixed (roof mount)", 2: "1-Axis Tracking", 3: "1-Axis Backtracking", 4: "2-Axis Tracking"}
-    def format_func_array(option):
-        return arrayTypeChoices[option]
-    arrayType = st.selectbox('Array Type',options=list(arrayTypeChoices.keys()),format_func=format_func_array,index=1)
-   
-    sysLossSelect = st.checkbox('Advanced Loss Calc')
+    runcasebutton = st.button('Run Case')
+
+    #Streamlit Sidebar Setup
+    st.sidebar.title('User Input')
+    st.sidebar.text_input('Case Name',value='Case 1',help='Enter a name for the modelled scenario')
+    location = st.sidebar.selectbox('City',['Austin','Dallas','Houston','Midland','San Antonio'],index=2)
+    avgMonthElecConsump = st.sidebar.number_input('Average Monthly Electricity Consumption (kwh)',min_value=0, max_value=20000,value=1500,step=100)
+
+    #Solar System Input
+    with st.sidebar.expander("Solar System Description",expanded = True):
+        dcSysSize = st.number_input('DC System Size (kW)',min_value=(0),max_value=(50),value=8)
     
-    if sysLossSelect:
-        soiling = st.number_input('Soiling (%)',min_value=(0.0),max_value=(100.0),value=2.0,step=0.1)
-        shading = st.number_input('Shading (%)',min_value=(0.0),max_value=(100.0),value=3.0,step=0.1)
-        snow = st.number_input('Snow (%)',min_value=(0.0),max_value=(100.0),value=0.0,step=0.1)
-        mismatch = st.number_input('Mismatch (%)',min_value=(0.0),max_value=(100.0),value=2.0,step=0.1)
-        wiring = st.number_input('Wiring (%)',min_value=(0.0),max_value=(100.0),value=2.0,step=0.1)
-        connections = st.number_input('Connections (%)',min_value=(0.0),max_value=(100.0),value=0.5,step=0.1)
-        initialDegradation = st.number_input('Inital Degradation',min_value=(0.0),max_value=(100.0),value=1.5,step=0.1)
-        nameplateRating = st.number_input('Nameplate Rating (%)',min_value=(0.0),max_value=(100.0),value=1.0,step=0.1)
-        age = st.number_input('Age (%)',min_value=(0.0),max_value=(100.0),value=0.0,step=0.1)
-        availability = st.number_input('Availability (%)',min_value=(0.0),max_value=(100.0),value=0.0,step=0.1)
-        systemLosses = (1-1*(1-soiling/100)*(1-shading/100)*(1-snow/100)*(1-mismatch/100)*(1-wiring/100)*(1-connections/100)*(1-initialDegradation/100)*(1-nameplateRating/100)*(1-age/100)*(1-availability/100))*100
-        st.number_input('System Losses (%)',min_value=(0.0),max_value=(100.0),value=systemLosses,disabled=False)       
-    else:
-        systemLosses = st.number_input('System Losses (%)',min_value=(0.0),max_value=(100.0),value=11.42)
+        moduleTypeChoices = {0: "Standard", 2: "Premium", 3: "Thin Film"}
+        def format_func_mod(option):
+            return moduleTypeChoices[option]
+        moduleType = st.selectbox('Module Type',options=list(moduleTypeChoices.keys()),format_func=format_func_mod,index=0)
     
-    tilt = st.number_input('Tilt (deg)',min_value=(0),max_value=(45),value=20)
-    azimuth = st.number_input('Azimuth (deg)',min_value=(0),max_value=(360),value=180)
+        arrayTypeChoices = {0: "Fixed (open rack)", 1: "Fixed (roof mount)", 2: "1-Axis Tracking", 3: "1-Axis Backtracking", 4: "2-Axis Tracking"}
+        def format_func_array(option):
+            return arrayTypeChoices[option]
+        arrayType = st.selectbox('Array Type',options=list(arrayTypeChoices.keys()),format_func=format_func_array,index=1)
+    
+        sysLossSelect = st.checkbox('Advanced Loss Calc')
+        
+        if sysLossSelect:
+            soiling = st.number_input('Soiling (%)',min_value=(0.0),max_value=(100.0),value=2.0,step=0.1)
+            shading = st.number_input('Shading (%)',min_value=(0.0),max_value=(100.0),value=3.0,step=0.1)
+            snow = st.number_input('Snow (%)',min_value=(0.0),max_value=(100.0),value=0.0,step=0.1)
+            mismatch = st.number_input('Mismatch (%)',min_value=(0.0),max_value=(100.0),value=2.0,step=0.1)
+            wiring = st.number_input('Wiring (%)',min_value=(0.0),max_value=(100.0),value=2.0,step=0.1)
+            connections = st.number_input('Connections (%)',min_value=(0.0),max_value=(100.0),value=0.5,step=0.1)
+            initialDegradation = st.number_input('Inital Degradation',min_value=(0.0),max_value=(100.0),value=1.5,step=0.1)
+            nameplateRating = st.number_input('Nameplate Rating (%)',min_value=(0.0),max_value=(100.0),value=1.0,step=0.1)
+            age = st.number_input('Age (%)',min_value=(0.0),max_value=(100.0),value=0.0,step=0.1)
+            availability = st.number_input('Availability (%)',min_value=(0.0),max_value=(100.0),value=0.0,step=0.1)
+            systemLosses = (1-1*(1-soiling/100)*(1-shading/100)*(1-snow/100)*(1-mismatch/100)*(1-wiring/100)*(1-connections/100)*(1-initialDegradation/100)*(1-nameplateRating/100)*(1-age/100)*(1-availability/100))*100
+            st.number_input('System Losses (%)',min_value=(0.0),max_value=(100.0),value=systemLosses,disabled=False)       
+        else:
+            systemLosses = st.number_input('System Losses (%)',min_value=(0.0),max_value=(100.0),value=11.42)
+        
+        tilt = st.number_input('Tilt (deg)',min_value=(0),max_value=(45),value=20)
+        azimuth = st.number_input('Azimuth (deg)',min_value=(0),max_value=(360),value=180)
 
-    selectAdvanced = st.checkbox("Show Advanced Input")
-    if selectAdvanced:
-        dcToACRatio = st.number_input('DC to AC Ratio',min_value=(0.1),max_value=(20.0),value=1.2)
-        inverterEff = st.number_input('Inverter Efficiency (%)',min_value=(0.1),max_value=(100.0),value=96.0)
-        groundCovRatio = st.number_input('Ground Coverage Ratio',min_value=(0.1),max_value=(1.0),value=0.4)
-    else:
-        dcToACRatio = 1.2
-        inverterEff = 96.0
-        groundCovRatio = 0.4
-#Battery System Setup
-    batteryInstalled = st.checkbox("Include Battery?")
-    if batteryInstalled:
-        batterySize = st.number_input('Battery Size (kwh)',min_value=(0.1), max_value=(500.0),value=13.5,step=0.1)
-        roundTripEff = st.number_input('Round Trip Efficiency (%)',min_value=(0.0),max_value=(100.0),value=92.5,step=0.1)
+        selectAdvanced = st.checkbox("Show Advanced Input")
+        if selectAdvanced:
+            dcToACRatio = st.number_input('DC to AC Ratio',min_value=(0.1),max_value=(20.0),value=1.2)
+            inverterEff = st.number_input('Inverter Efficiency (%)',min_value=(0.1),max_value=(100.0),value=96.0)
+            groundCovRatio = st.number_input('Ground Coverage Ratio',min_value=(0.1),max_value=(1.0),value=0.4)
+        else:
+            dcToACRatio = 1.2
+            inverterEff = 96.0
+            groundCovRatio = 0.4
+    #Battery System Setup
+        batteryInstalled = st.checkbox("Include Battery?")
+        if batteryInstalled:
+            batterySize = st.number_input('Battery Size (kwh)',min_value=(0.1), max_value=(500.0),value=13.5,step=0.1)
+            roundTripEff = st.number_input('Round Trip Efficiency (%)',min_value=(0.0),max_value=(100.0),value=92.5,step=0.1)
 
 
-#Electric Conctract Setup
-with st.sidebar.expander("Electricity Plan Details",expanded = True):
-    energyCharge = st.number_input('Energy Charge ($/kwh)',min_value=(0.00),max_value=(100.00),value=0.100,format="%.3f")
-    deliveryCharge = st.number_input('Delivery Charge ($/kwh)',min_value=(0.00),max_value=(100.00),value=0.04945,format="%.5f")
-    fixedDelCharge = st.number_input('Fixed Delivery Charge $/month',min_value=(0.0),max_value=(100.0),value=(4.39))
-    buyBackType = st.selectbox('Buy Back Type',('Net Credit','Real Time Market'))
-    touFeatures = st.selectbox('Plan Time-of-Use Features',('None','Free Nights','Free Weekends','Free Nights & Wk Ends','Reduced Cost Nights'),index=0)
-    if touFeatures == 'Free Nights':
-        nightStart = st.time_input('Night Start Time', datetime.time(20,0))
-        nightEnd = st.time_input('Night End Time', datetime.time(6,0))
-    elif touFeatures == 'Free Weekends':
-        wkDayTypeChoices = {0: "Monday", 1: "Tuesday", 2: "Wednesday", 3:"Thursday", 4:"Friday",5:"Saturday", 6: "Sunday", }
-        def format_func_wkDay(option):
-            return wkDayTypeChoices[option]
-        wkendDayStart = st.selectbox('Weekend Start',options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=4)
-        wkendDayEnd = st.selectbox('Weekend End', options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=0)
-        wkendTimeStart = st.time_input('Weekend Start Time',datetime.time(20,0))
-        wkendTimeEnd = st.time_input('Weekend End Time', datetime.time(6,0))
-    elif touFeatures == 'Free Nights & Wk Ends':
-        nightStart = st.time_input('Night Start Time', datetime.time(20,0))
-        nightEnd = st.time_input('Night End Time', datetime.time(6,0))
-        wkDayTypeChoices = {0: "Monday", 1: "Tuesday", 2: "Wednesday", 3:"Thursday", 4:"Friday",5:"Saturday", 6: "Sunday", }
-        def format_func_wkDay(option):
-            return wkDayTypeChoices[option]
-        wkendDayStart = st.selectbox('Weekend Start',options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=4)
-        wkendDayEnd = st.selectbox('Weekend End', options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=0)
-        wkendTimeStart = st.time_input('Weekend Start Time',datetime.time(20,0))
-        wkendTimeEnd = st.time_input('Weekend End Time', datetime.time(6,0))
-    elif touFeatures == 'Reduced Cost Nights':
-        nightEnergyCharge = st.number_input('Night Energy Charge ($/kwh)',min_value=(0.00),max_value=(100.00),value=0.100,format="%.3f")
-        nightStart = st.time_input('Night Start Time', datetime.time(20,0))
-        nightEnd = st.time_input('Night End Time', datetime.time(6,0))
-    elif touFeatures == 'None':
-        nightStart = datetime.time(20,0)
-        nightEnd = datetime.time(6,0)
-        wkendDayStart = 'Friday'
-        wkendDayEnd = 'Monday'
-        wkendTimeStart = datetime.time(20,0)
-        wkendTimeEnd = datetime.time(6,0)
+    #Electric Conctract Setup
+    with st.sidebar.expander("Electricity Plan Details",expanded = True):
+        energyCharge = st.number_input('Energy Charge ($/kwh)',min_value=(0.00),max_value=(100.00),value=0.100,format="%.3f")
+        deliveryCharge = st.number_input('Delivery Charge ($/kwh)',min_value=(0.00),max_value=(100.00),value=0.04945,format="%.5f")
+        fixedDelCharge = st.number_input('Fixed Delivery Charge $/month',min_value=(0.0),max_value=(100.0),value=(4.39))
+        buyBackType = st.selectbox('Buy Back Type',('Net Credit','Real Time Market'))
+        touFeatures = st.selectbox('Plan Time-of-Use Features',('None','Free Nights','Free Weekends','Free Nights & Wk Ends','Reduced Cost Nights'),index=0)
+        if touFeatures == 'Free Nights':
+            nightStart = st.time_input('Night Start Time', datetime.time(20,0))
+            nightEnd = st.time_input('Night End Time', datetime.time(6,0))
+        elif touFeatures == 'Free Weekends':
+            wkDayTypeChoices = {0: "Monday", 1: "Tuesday", 2: "Wednesday", 3:"Thursday", 4:"Friday",5:"Saturday", 6: "Sunday", }
+            def format_func_wkDay(option):
+                return wkDayTypeChoices[option]
+            wkendDayStart = st.selectbox('Weekend Start',options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=4)
+            wkendDayEnd = st.selectbox('Weekend End', options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=0)
+            wkendTimeStart = st.time_input('Weekend Start Time',datetime.time(20,0))
+            wkendTimeEnd = st.time_input('Weekend End Time', datetime.time(6,0))
+        elif touFeatures == 'Free Nights & Wk Ends':
+            nightStart = st.time_input('Night Start Time', datetime.time(20,0))
+            nightEnd = st.time_input('Night End Time', datetime.time(6,0))
+            wkDayTypeChoices = {0: "Monday", 1: "Tuesday", 2: "Wednesday", 3:"Thursday", 4:"Friday",5:"Saturday", 6: "Sunday", }
+            def format_func_wkDay(option):
+                return wkDayTypeChoices[option]
+            wkendDayStart = st.selectbox('Weekend Start',options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=4)
+            wkendDayEnd = st.selectbox('Weekend End', options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=0)
+            wkendTimeStart = st.time_input('Weekend Start Time',datetime.time(20,0))
+            wkendTimeEnd = st.time_input('Weekend End Time', datetime.time(6,0))
+        elif touFeatures == 'Reduced Cost Nights':
+            nightEnergyCharge = st.number_input('Night Energy Charge ($/kwh)',min_value=(0.00),max_value=(100.00),value=0.100,format="%.3f")
+            nightStart = st.time_input('Night Start Time', datetime.time(20,0))
+            nightEnd = st.time_input('Night End Time', datetime.time(6,0))
+        elif touFeatures == 'None':
+            nightStart = datetime.time(20,0)
+            nightEnd = datetime.time(6,0)
+            wkendDayStart = 'Friday'
+            wkendDayEnd = 'Monday'
+            wkendTimeStart = datetime.time(20,0)
+ 
+#with tab2: #Tab2 is for the NPV inputs and to calculate and display NPV data
+
+#    runNPV = st.button("Run NPV and Rate of Return Calc")
+
+
+
 
 #NREL request building
 @st.cache
@@ -129,8 +141,8 @@ def GetNRELData(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, 
     df=pd.json_normalize(response.json(),max_level=1)
     return df
 
-#@st.cache
-def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio):
+
+def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio, year, energyInf, panelDeg):
     #fetch NREL solar data
     dfJson = GetNRELData(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio)
     
@@ -310,16 +322,28 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
     #Import the real time market (RTM) pricing data developed from 2020 - 2022 ERCOT load zone RTM data
     dfActivecase['RTM Price'] = pd.DataFrame(pd.read_csv('RTMprices-Texas.csv'), columns=[location])
     dfActivecase['Pwr Sold Value - Solar'] = dfActivecase['RTM Price'].multiply(dfActivecase['Power Sold - Solar'])
-    dfActivecase['Pwr Sold Value - Battery'] = dfActivecase['RTM Price'].multiply(dfActivecase['Power Sold - Battery'])
+    if batteryInstalled:
+        dfActivecase['Pwr Sold Value - Battery'] = dfActivecase['RTM Price'].multiply(dfActivecase['Power Sold - Battery'])
+
     dfActivecase.drop('RTM Price', axis=1, inplace = True)
 
-    st.write(dfActivecase)
     return dfActivecase
 
+def CalcNPV ():
+    year = 0
+    return
+
+
+
+
 if runcasebutton:
-    dfActivecase = RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio)
+    dfActivecase = RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio, 1, 1, 1)
 
-
-    
-    
-
+    dfResultDisp = pd.DataFrame()
+    dfResultDisp = dfActivecase.groupby(['MonthNum'], as_index=False)['Solar Gen (kw)'].sum()
+    d = dict(enumerate(calendar.month_abbr))
+    dfResultDisp['Month'] = dfResultDisp['MonthNum'].map(d)
+    st.text(dfResultDisp['Solar Gen (kw)'].sum())
+    #dfResultDisp.sort_values('MonthNum')
+    c = alt.Chart(dfResultDisp).mark_bar().encode(x=alt.X('Month',sort=dfResultDisp['MonthNum'].values),y='Solar Gen (kw)')
+    st.altair_chart(c, use_container_width=True)

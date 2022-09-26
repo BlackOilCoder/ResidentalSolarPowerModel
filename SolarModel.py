@@ -343,7 +343,7 @@ if runcasebutton:
     dfResultDisp = dfActivecase.groupby(['MonthNum'], as_index=False)['Solar Gen (kw)'].sum()
     d = dict(enumerate(calendar.month_abbr))
     dfResultDisp['Month'] = dfResultDisp['MonthNum'].map(d)
-    st.text(dfResultDisp['Solar Gen (kw)'].sum())
+    st.metric('Total Yearly Solar Power Generated',str(int(round(dfResultDisp['Solar Gen (kw)'].sum(),0)))+' kwh',delta=None)
     #dfResultDisp.sort_values('MonthNum')
     c = alt.Chart(dfResultDisp).mark_bar().encode(x=alt.X('Month',sort=dfResultDisp['MonthNum'].values),y='Solar Gen (kw)')
     st.altair_chart(c, use_container_width=True)

@@ -334,8 +334,6 @@ def CalcNPV ():
     return
 
 
-
-
 if runcasebutton:
     dfActivecase = RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio, 1, 1, 1)
 
@@ -344,6 +342,5 @@ if runcasebutton:
     d = dict(enumerate(calendar.month_abbr))
     dfResultDisp['Month'] = dfResultDisp['MonthNum'].map(d)
     st.metric('Total Yearly Solar Power Generated',str(int(round(dfResultDisp['Solar Gen (kw)'].sum(),0)))+' kwh',delta=None)
-    #dfResultDisp.sort_values('MonthNum')
     c = alt.Chart(dfResultDisp).mark_bar().encode(x=alt.X('Month',sort=dfResultDisp['MonthNum'].values),y='Solar Gen (kw)')
     st.altair_chart(c, use_container_width=True)

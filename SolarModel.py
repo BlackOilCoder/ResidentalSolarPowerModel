@@ -34,6 +34,14 @@ if 'caseCatalog' not in st.session_state:
 if 'compareCaseIndex' not in st.session_state:
         st.session_state.compareCaseIndex = 0
 
+if 'displayRunCase' not in st.session_state:
+        st.session_state.displayRunCase = False
+
+if 'displayViewCase' not in st.session_state:
+        st.session_state.displayViewCase = False
+
+if 'viewCaseIndex' not in st.session_state:
+        st.session_state.viewCaseIndex = 0
 
 #Setup the Streamlit Input
 
@@ -41,97 +49,101 @@ if 'compareCaseIndex' not in st.session_state:
 st.title('Texas Residential Solar Power System Modeling Tool')
 tab1, tab2 = st.tabs(["Solar Power System Calculations", "NPV and Rate of Return Calculations"])
 
-
+def ResetView():    
+    if st.session_state.displayViewCase == True:
+        return
+    st.session_state.displayRunCase = True
+    return
 
 #Streamlit Sidebar Setup
 st.sidebar.title('User Input')
-caseName = st.sidebar.text_input('Case Name',value='Case 1',help='Enter a name for the modeled scenario')
-location = st.sidebar.selectbox('City',['Austin','Dallas','Houston','Midland','San Antonio'],index=2)
-avgMonthElecConsump = st.sidebar.number_input('Average Monthly Electricity Consumption (kwh)',min_value=0, max_value=20000,value=1500,step=100)
+caseName = st.sidebar.text_input('Case Name',value='Case 1',help='Enter a name for the modeled scenario', on_change=ResetView)
+location = st.sidebar.selectbox('City',['Austin','Dallas','Houston','Midland','San Antonio'],index=2, on_change=ResetView)
+avgMonthElecConsump = st.sidebar.number_input('Average Monthly Electricity Consumption (kwh)',min_value=0, max_value=20000,value=1500,step=100, on_change=ResetView)
 
 #Solar System Input
 with st.sidebar.expander("Solar System Description",expanded = True):
-    dcSysSize = st.number_input('DC System Size (kW)',min_value=(0),max_value=(50),value=8)
+    dcSysSize = st.number_input('DC System Size (kW)',min_value=(0),max_value=(50),value=8, on_change=ResetView)
 
     moduleTypeChoices = {0: "Standard", 2: "Premium", 3: "Thin Film"}
     def format_func_mod(option):
         return moduleTypeChoices[option]
-    moduleType = st.selectbox('Module Type',options=list(moduleTypeChoices.keys()),format_func=format_func_mod,index=0)
+    moduleType = st.selectbox('Module Type',options=list(moduleTypeChoices.keys()),format_func=format_func_mod,index=0, on_change=ResetView)
 
     arrayTypeChoices = {0: "Fixed (open rack)", 1: "Fixed (roof mount)", 2: "1-Axis Tracking", 3: "1-Axis Backtracking", 4: "2-Axis Tracking"}
     def format_func_array(option):
         return arrayTypeChoices[option]
-    arrayType = st.selectbox('Array Type',options=list(arrayTypeChoices.keys()),format_func=format_func_array,index=1)
+    arrayType = st.selectbox('Array Type',options=list(arrayTypeChoices.keys()),format_func=format_func_array,index=1, on_change=ResetView)
 
-    sysLossSelect = st.checkbox('Advanced Loss Calc')
+    sysLossSelect = st.checkbox('Advanced Loss Calc', on_change=ResetView)
     
     if sysLossSelect:
-        soiling = st.number_input('Soiling (%)',min_value=(0.0),max_value=(100.0),value=2.0,step=0.1)
-        shading = st.number_input('Shading (%)',min_value=(0.0),max_value=(100.0),value=3.0,step=0.1)
-        snow = st.number_input('Snow (%)',min_value=(0.0),max_value=(100.0),value=0.0,step=0.1)
-        mismatch = st.number_input('Mismatch (%)',min_value=(0.0),max_value=(100.0),value=2.0,step=0.1)
-        wiring = st.number_input('Wiring (%)',min_value=(0.0),max_value=(100.0),value=2.0,step=0.1)
-        connections = st.number_input('Connections (%)',min_value=(0.0),max_value=(100.0),value=0.5,step=0.1)
-        initialDegradation = st.number_input('Inital Degradation',min_value=(0.0),max_value=(100.0),value=1.5,step=0.1)
-        nameplateRating = st.number_input('Nameplate Rating (%)',min_value=(0.0),max_value=(100.0),value=1.0,step=0.1)
-        age = st.number_input('Age (%)',min_value=(0.0),max_value=(100.0),value=0.0,step=0.1)
-        availability = st.number_input('Availability (%)',min_value=(0.0),max_value=(100.0),value=0.0,step=0.1)
+        soiling = st.number_input('Soiling (%)',min_value=(0.0),max_value=(100.0),value=2.0,step=0.1, on_change=ResetView)
+        shading = st.number_input('Shading (%)',min_value=(0.0),max_value=(100.0),value=3.0,step=0.1, on_change=ResetView)
+        snow = st.number_input('Snow (%)',min_value=(0.0),max_value=(100.0),value=0.0,step=0.1, on_change=ResetView)
+        mismatch = st.number_input('Mismatch (%)',min_value=(0.0),max_value=(100.0),value=2.0,step=0.1, on_change=ResetView)
+        wiring = st.number_input('Wiring (%)',min_value=(0.0),max_value=(100.0),value=2.0,step=0.1, on_change=ResetView)
+        connections = st.number_input('Connections (%)',min_value=(0.0),max_value=(100.0),value=0.5,step=0.1, on_change=ResetView)
+        initialDegradation = st.number_input('Inital Degradation',min_value=(0.0),max_value=(100.0),value=1.5,step=0.1, on_change=ResetView)
+        nameplateRating = st.number_input('Nameplate Rating (%)',min_value=(0.0),max_value=(100.0),value=1.0,step=0.1, on_change=ResetView)
+        age = st.number_input('Age (%)',min_value=(0.0),max_value=(100.0),value=0.0,step=0.1, on_change=ResetView)
+        availability = st.number_input('Availability (%)',min_value=(0.0),max_value=(100.0),value=0.0,step=0.1, on_change=ResetView)
         systemLosses = (1-1*(1-soiling/100)*(1-shading/100)*(1-snow/100)*(1-mismatch/100)*(1-wiring/100)*(1-connections/100)*(1-initialDegradation/100)*(1-nameplateRating/100)*(1-age/100)*(1-availability/100))*100
-        st.number_input('System Losses (%)',min_value=(0.0),max_value=(100.0),value=systemLosses,disabled=False)       
+        st.number_input('System Losses (%)',min_value=(0.0),max_value=(100.0),value=systemLosses,disabled=False, on_change=ResetView)       
     else:
-        systemLosses = st.number_input('System Losses (%)',min_value=(0.0),max_value=(100.0),value=11.42)
+        systemLosses = st.number_input('System Losses (%)',min_value=(0.0),max_value=(100.0),value=11.42, on_change=ResetView)
     
-    tilt = st.number_input('Tilt (deg)',min_value=(0),max_value=(45),value=20)
-    azimuth = st.number_input('Azimuth (deg)',min_value=(0),max_value=(360),value=180)
+    tilt = st.number_input('Tilt (deg)',min_value=(0),max_value=(45),value=20, on_change=ResetView)
+    azimuth = st.number_input('Azimuth (deg)',min_value=(0),max_value=(360),value=180, on_change=ResetView)
 
     selectAdvanced = st.checkbox("Show Advanced Input")
     if selectAdvanced:
-        dcToACRatio = st.number_input('DC to AC Ratio',min_value=(0.1),max_value=(20.0),value=1.2)
-        inverterEff = st.number_input('Inverter Efficiency (%)',min_value=(0.1),max_value=(100.0),value=96.0)
-        groundCovRatio = st.number_input('Ground Coverage Ratio',min_value=(0.1),max_value=(1.0),value=0.4)
+        dcToACRatio = st.number_input('DC to AC Ratio',min_value=(0.1),max_value=(20.0),value=1.2, on_change=ResetView)
+        inverterEff = st.number_input('Inverter Efficiency (%)',min_value=(0.1),max_value=(100.0),value=96.0, on_change=ResetView)
+        groundCovRatio = st.number_input('Ground Coverage Ratio',min_value=(0.1),max_value=(1.0),value=0.4, on_change=ResetView)
     else:
         dcToACRatio = 1.2
         inverterEff = 96.0
         groundCovRatio = 0.4
 #Battery System Setup
-    batteryInstalled = st.checkbox("Include Battery?")
+    batteryInstalled = st.checkbox("Include Battery?", on_change=ResetView)
     if batteryInstalled:
-        batterySize = st.number_input('Battery Size (kwh)',min_value=(0.1), max_value=(500.0),value=13.5,step=0.1)
-        roundTripEff = st.number_input('Round Trip Efficiency (%)',min_value=(0.0),max_value=(100.0),value=92.5,step=0.1)
+        batterySize = st.number_input('Battery Size (kwh)',min_value=(0.1), max_value=(500.0),value=13.5,step=0.1, on_change=ResetView)
+        roundTripEff = st.number_input('Round Trip Efficiency (%)',min_value=(0.0),max_value=(100.0),value=92.5,step=0.1, on_change=ResetView)
 
 
 #Electric Conctract Setup
 with st.sidebar.expander("Electricity Plan Details",expanded = True):
-    energyCharge = st.number_input('Energy Charge ($/kwh)',min_value=(0.00),max_value=(100.00),value=0.100,format="%.3f")
-    deliveryCharge = st.number_input('Delivery Charge ($/kwh)',min_value=(0.00),max_value=(100.00),value=0.04945,format="%.5f")
-    fixedDelCharge = st.number_input('Fixed Delivery Charge $/month',min_value=(0.0),max_value=(100.0),value=(4.39))
-    buyBackType = st.selectbox('Buy Back Type',('Net Credit','Real Time Market'))
-    touFeatures = st.selectbox('Plan Time-of-Use Features',('None','Free Nights','Free Weekends','Free Nights & Wk Ends','Reduced Cost Nights'),index=0)
+    energyCharge = st.number_input('Energy Charge ($/kwh)',min_value=(0.00),max_value=(100.00),value=0.100,format="%.3f", on_change=ResetView)
+    deliveryCharge = st.number_input('Delivery Charge ($/kwh)',min_value=(0.00),max_value=(100.00),value=0.04945,format="%.5f", on_change=ResetView)
+    fixedDelCharge = st.number_input('Fixed Delivery Charge $/month',min_value=(0.0),max_value=(100.0),value=(4.39), on_change=ResetView)
+    buyBackType = st.selectbox('Buy Back Type',('Net Credit','Real Time Market'), on_change=ResetView)
+    touFeatures = st.selectbox('Plan Time-of-Use Features',('None','Free Nights','Free Weekends','Free Nights & Wk Ends','Reduced Cost Nights'),index=0, on_change=ResetView)
     if touFeatures == 'Free Nights':
-        nightStart = st.time_input('Night Start Time', datetime.time(20,0))
-        nightEnd = st.time_input('Night End Time', datetime.time(6,0))
+        nightStart = st.time_input('Night Start Time', datetime.time(20,0), on_change=ResetView)
+        nightEnd = st.time_input('Night End Time', datetime.time(6,0), on_change=ResetView)
     elif touFeatures == 'Free Weekends':
         wkDayTypeChoices = {0: "Monday", 1: "Tuesday", 2: "Wednesday", 3:"Thursday", 4:"Friday",5:"Saturday", 6: "Sunday", }
         def format_func_wkDay(option):
             return wkDayTypeChoices[option]
-        wkendDayStart = st.selectbox('Weekend Start',options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=4)
-        wkendDayEnd = st.selectbox('Weekend End', options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=0)
-        wkendTimeStart = st.time_input('Weekend Start Time',datetime.time(20,0))
-        wkendTimeEnd = st.time_input('Weekend End Time', datetime.time(6,0))
+        wkendDayStart = st.selectbox('Weekend Start',options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=4, on_change=ResetView)
+        wkendDayEnd = st.selectbox('Weekend End', options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=0, on_change=ResetView)
+        wkendTimeStart = st.time_input('Weekend Start Time',datetime.time(20,0), on_change=ResetView)
+        wkendTimeEnd = st.time_input('Weekend End Time', datetime.time(6,0), on_change=ResetView)
     elif touFeatures == 'Free Nights & Wk Ends':
-        nightStart = st.time_input('Night Start Time', datetime.time(20,0))
-        nightEnd = st.time_input('Night End Time', datetime.time(6,0))
+        nightStart = st.time_input('Night Start Time', datetime.time(20,0), on_change=ResetView)
+        nightEnd = st.time_input('Night End Time', datetime.time(6,0), on_change=ResetView)
         wkDayTypeChoices = {0: "Monday", 1: "Tuesday", 2: "Wednesday", 3:"Thursday", 4:"Friday",5:"Saturday", 6: "Sunday", }
         def format_func_wkDay(option):
             return wkDayTypeChoices[option]
-        wkendDayStart = st.selectbox('Weekend Start',options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=4)
-        wkendDayEnd = st.selectbox('Weekend End', options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=0)
-        wkendTimeStart = st.time_input('Weekend Start Time',datetime.time(20,0))
-        wkendTimeEnd = st.time_input('Weekend End Time', datetime.time(6,0))
+        wkendDayStart = st.selectbox('Weekend Start',options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=4, on_change=ResetView)
+        wkendDayEnd = st.selectbox('Weekend End', options=list(wkDayTypeChoices.keys()),format_func=format_func_wkDay,index=0, on_change=ResetView)
+        wkendTimeStart = st.time_input('Weekend Start Time',datetime.time(20,0), on_change=ResetView)
+        wkendTimeEnd = st.time_input('Weekend End Time', datetime.time(6,0), on_change=ResetView)
     elif touFeatures == 'Reduced Cost Nights':
-        nightEnergyCharge = st.number_input('Night Energy Charge ($/kwh)',min_value=(0.00),max_value=(100.00),value=0.100,format="%.3f")
-        nightStart = st.time_input('Night Start Time', datetime.time(20,0))
-        nightEnd = st.time_input('Night End Time', datetime.time(6,0))
+        nightEnergyCharge = st.number_input('Night Energy Charge ($/kwh)',min_value=(0.00),max_value=(100.00),value=0.100,format="%.3f", on_change=ResetView)
+        nightStart = st.time_input('Night Start Time', datetime.time(20,0), on_change=ResetView)
+        nightEnd = st.time_input('Night End Time', datetime.time(6,0), on_change=ResetView)
     elif touFeatures == 'None':
         nightStart = datetime.time(20,0)
         nightEnd = datetime.time(6,0)
@@ -152,7 +164,7 @@ def GetNRELData(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, 
     df=pd.json_normalize(response.json(),max_level=1)
     return df
 
-
+@st.cache
 def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio, year, energyInf, panelDeg):
     global dfActivecase
     #fetch NREL solar data
@@ -391,9 +403,18 @@ def CalcNPV ():
     year = 0
     return
 
+def DisplayViewCase():
+    st.session_state.displayViewCase = True
+    caseLookup = st.session_state.viewChoice
+    st.session_state.viewCaseIndex = st.session_state.caseCatalog.index(caseLookup)
+    return
+
+
 def DisplayCase (dfDisplayCase, caseIndex):
     dfResultDisp = pd.DataFrame()
-    dfResultDisp = dfDisplayCase.groupby(['MonthNum'], as_index=False)['Solar Gen (kw)','Power Saved','Power Sold','Power Sold Value', 'Power Saved Value'].sum()
+    dfResultDisp = dfDisplayCase.groupby(['MonthNum'], as_index=False)[
+        'Solar Gen (kw)','Power Saved','Power Sold','Power Sold Value', 'Power Saved Value'
+        ].sum()
     d = dict(enumerate(calendar.month_abbr))
     dfResultDisp['Month'] = dfResultDisp['MonthNum'].map(d)
             
@@ -418,37 +439,58 @@ def DisplayCase (dfDisplayCase, caseIndex):
         )    
 
     st.altair_chart(c, use_container_width=True)
-    dfCaseInputs = st.session_state.collectionofCaseData[caseIndex]
-    dfCaseDisplay = dfCaseInputs.set_index('Case Number').transpose()
-    st.dataframe(dfCaseDisplay)
+    #Prepare case inputs for display
+    dfCaseInputs = pd.DataFrame([st.session_state.collectionofCaseData[caseIndex]])
+    dfCaseDisplay = dfCaseInputs.transpose()
+    dfCaseDisplay.index.rename('Input Parameters', inplace = True)
+    dfCaseDisplay = dfCaseDisplay.rename(columns={0: 'User Inputs'})
+    dfCaseDisplay.columns.name = dfCaseDisplay.index.name
+    dfCaseDisplay.index.name = None
+
+    st.write(dfCaseDisplay.to_html(), unsafe_allow_html = True)
+
     return
 
+
 def RunCaseButton():
+    st.session_state.displayViewCase = False
     caseData = {
-        'Case Number': [st.session_state.caseIndex],
-        'Case Name': [caseName],
-        'City': [location],
-        'Solar System DC Size (kw)': [dcSysSize],
-        'Module Type': [moduleType],
-        'Array Type': [arrayType,],
-        'System Losses (%)': [systemLosses],
-        'Tilt (deg)': [tilt],
-        'Azimuth (deg)' : [azimuth],
-        'Battery Installed' : [batteryInstalled],
-        'Energy Charge ($)': [energyCharge],
-        'Delivery Charge ($)' : [deliveryCharge],
-        'Buy Back Type' : [buyBackType],
-        'Time of Use Features' : [touFeatures]
+        #'Case Number': st.session_state.caseIndex, #doesn't seem to be required at this time
+        'Case Name': caseName,
+        'City': location,
+        'Annual Monthly Elec Usage (kwh)' : avgMonthElecConsump,
+        'Solar System DC Size (kw)': dcSysSize,
+        'Module Type': moduleType,
+        'Array Type': arrayType,
+        'System Losses (%)': systemLosses,
+        'Tilt (deg)': tilt,
+        'Azimuth (deg)' : azimuth,
+        'Battery Installed' : batteryInstalled,
+        'Energy Charge ($)': energyCharge,
+        'Delivery Charge ($)' : deliveryCharge,
+        'Buy Back Type' : buyBackType,
+        'Time of Use Features' : touFeatures
     }
     
-    st.session_state.collectionofCaseData.append(pd.DataFrame(caseData))
-    st.write([x['Case Name'] for x in st.session_state.collectionofCaseData])   #temp debug
+    #Check if the same case is being accidentlly run twice and skip the work
+    if st.session_state.caseIndex > 0:
+        if caseData == st.session_state.collectionofCaseData[st.session_state.caseIndex - 1]:           
+            st.session_state.displayRunCase = True
+            return
+
+    #Check if case name is unique, if not warn, and all "-alt" to the case name
+    if any(d['Case Name'] == caseData['Case Name'] for d in st.session_state.collectionofCaseData):
+        st.warning("Case Name already exists, please give a unique Case Name")
+        st.session_state.displayRunCase = True
+        return
+
+    st.session_state.collectionofCaseData.append(caseData)
     st.session_state.caseCatalog = [x['Case Name'] for x in st.session_state.collectionofCaseData]
     dfActivecase = RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio, 1, 1, 1)
     st.session_state.collectionofCases.append(dfActivecase)
-    #DisplayCase(dfActivecase, st.session_state.caseIndex)
-    
+    #DisplayCase(st.session_state.collectionofCases[st.session_state.caseIndex], (st.session_state.caseIndex)) 
     st.session_state.caseIndex += 1
+    st.session_state.displayRunCase = True
 
 
 with tab1: #Tab 1 is the solar system main calculation tab where results on the base solar power system are shown
@@ -457,16 +499,32 @@ with tab1: #Tab 1 is the solar system main calculation tab where results on the 
     with col1:
         runcasebutton = st.button('Run Case',on_click=RunCaseButton)
     with col2:
+        #If more than one case run, show select box for view case
         if len(st.session_state.collectionofCases) > 1:
-            displayIndexLookup = st.selectbox('View Case',pd.DataFrame(st.session_state.caseCatalog), index = int(st.session_state.caseIndex - 1))
-            #displayIndex = st.session_state.caseCatalog.index(displayIndexLookup)
-            #DisplayCase(st.session_state.collectionofCases[displayIndex],displayIndex)
+            #If a case is run, display the case just ran
+            if st.session_state.displayRunCase:
+                displayIndexLookup = st.selectbox('View Case',pd.DataFrame(st.session_state.caseCatalog),
+                    index = int(st.session_state.caseIndex - 1), on_change=DisplayViewCase,key = 'viewChoice'
+                    )
+            #If a view case was chosen, display view case
+            if st.session_state.displayViewCase:
+                st.selectbox('View Case',pd.DataFrame(st.session_state.caseCatalog),
+                    index = int(st.session_state.viewCaseIndex), on_change=DisplayViewCase,key = 'viewChoice'
+                    )
+
     with col3:
+        #If more than one case run, show compare box for view case
         if len(st.session_state.collectionofCases) > 1:
-            st.selectbox('Case to Compare',pd.DataFrame(st.session_state.caseCatalog), index = int(st.session_state.compareCaseIndex))
+            compareIndexLookup = st.selectbox('Case to Compare',pd.DataFrame(st.session_state.caseCatalog),
+                index = int(st.session_state.compareCaseIndex), on_change=ResetView, key ='compareChoice')
+            st.session_state.compareCaseIndex = st.session_state.caseCatalog.index(compareIndexLookup)
                
-    if st.session_state.caseIndex > 0 & runcasebutton:
-        DisplayCase(st.session_state.collectionofCases[st.session_state.caseIndex - 1], (st.session_state.caseIndex - 1))  
+    if st.session_state.displayRunCase & (len(st.session_state.collectionofCases) > 0):
+        DisplayCase(st.session_state.collectionofCases[st.session_state.caseIndex - 1], (st.session_state.caseIndex - 1))
+        st.session_state.displayRunCase = False
+
+    if st.session_state.displayViewCase & (len(st.session_state.collectionofCases) > 0):
+        DisplayCase(st.session_state.collectionofCases[st.session_state.viewCaseIndex], (st.session_state.viewCaseIndex))
         
         
 with tab2: #Tab2 is for the NPV inputs and to calculate and display NPV data

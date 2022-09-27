@@ -529,6 +529,9 @@ with tab1: #Tab 1 is the solar system main calculation tab where results on the 
                         del compareCatalog[i]
                         break
 
+            while st.session_state.compareCaseIndex >= len(compareCatalog):
+                st.session_state.compareCaseIndex -= 1
+
             compareIndexLookup = st.selectbox('Case to Compare',pd.DataFrame(compareCatalog),
                 index = int(st.session_state.compareCaseIndex), on_change=ResetView, key ='compareChoice')
             st.session_state.compareCaseIndex = st.session_state.caseCatalog.index(compareIndexLookup)

@@ -515,7 +515,21 @@ with tab1: #Tab 1 is the solar system main calculation tab where results on the 
     with col3:
         #If more than one case run, show compare box for view case
         if len(st.session_state.collectionofCases) > 1:
-            compareIndexLookup = st.selectbox('Case to Compare',pd.DataFrame(st.session_state.caseCatalog),
+            #Remove current view case from list of compare cases
+            compareCatalog = st.session_state.caseCatalog.copy()
+            
+            if st.session_state.displayRunCase:
+                for i in range(len(compareCatalog)):
+                    if compareCatalog[i] == st.session_state.caseCatalog[st.session_state.caseIndex - 1]:
+                        del compareCatalog[i]
+                        break
+            if st.session_state.displayViewCase:
+                for i in range(len(compareCatalog)):
+                    if compareCatalog[i] == st.session_state.caseCatalog[st.session_state.viewCaseIndex]:
+                        del compareCatalog[i]
+                        break
+
+            compareIndexLookup = st.selectbox('Case to Compare',pd.DataFrame(compareCatalog),
                 index = int(st.session_state.compareCaseIndex), on_change=ResetView, key ='compareChoice')
             st.session_state.compareCaseIndex = st.session_state.caseCatalog.index(compareIndexLookup)
                

@@ -417,20 +417,57 @@ def DisplayCase (dfDisplayCase, caseIndex):
         ].sum()
     d = dict(enumerate(calendar.month_abbr))
     dfResultDisp['Month'] = dfResultDisp['MonthNum'].map(d)
-            
+
+    #Setup metrics for comparing cases
+    if len(st.session_state.collectionofCases) > 1:
+        dfCompareCase  = st.session_state.collectionofCases[st.session_state.compareCaseIndex]
+        
+        deltaPwrGen = str(round((dfResultDisp['Solar Gen (kw)'].sum() - dfCompareCase['Solar Gen (kw)'].sum())/
+            (min(dfResultDisp['Solar Gen (kw)'].sum(),dfCompareCase['Solar Gen (kw)'].sum()))*100,1))+'%'
+        
+        deltaPwrSaved = str(round((dfResultDisp['Power Saved'].sum() - dfCompareCase['Power Saved'].sum())/
+            (min(dfResultDisp['Power Saved'].sum(),dfCompareCase['Power Saved'].sum()))*100,1))+'%'
+        
+        deltaPwrSold = str(round((dfResultDisp['Power Sold'].sum() - dfCompareCase['Power Sold'].sum())/
+            (min(dfResultDisp['Power Sold'].sum(),dfCompareCase['Power Sold'].sum()))*100,1))+'%'
+
+        annualSavingsDisp = dfResultDisp['Power Saved Value'].sum() + dfResultDisp['Power Sold Value'].sum()
+        annualSavingsComp = dfCompareCase['Power Saved Value'].sum() + dfCompareCase['Power Sold Value'].sum()
+        deltaAnnSavings = str(round((annualSavingsDisp - annualSavingsComp)/
+            (min(annualSavingsDisp,annualSavingsComp))*100,1))+'%'
+
+        deltaValPwrSaved = str(round((dfResultDisp['Power Saved Value'].sum() - dfCompareCase['Power Saved Value'].sum())/
+            (min(dfResultDisp['Power Saved Value'].sum(),dfCompareCase['Power Saved Value'].sum()))*100,1))+'%'
+
+        deltaValPwrSold = str(round((dfResultDisp['Power Sold Value'].sum() - dfCompareCase['Power Sold Value'].sum())/
+            (min(dfResultDisp['Power Sold Value'].sum(),dfCompareCase['Power Sold Value'].sum()))*100,1))+'%'
+
+        monSavingsDisp = dfResultDisp['Power Saved Value'].sum() + dfResultDisp['Power Sold Value'].sum()
+        monSavingsComp = dfCompareCase['Power Saved Value'].sum() + dfCompareCase['Power Sold Value'].sum()
+        deltaMonSavings = str(round((monSavingsDisp - monSavingsComp)/
+            (min(monSavingsDisp,monSavingsComp))*100,1))+'%'
+    else:
+        deltaPwrGen = None
+        deltaPwrSaved = None
+        deltaPwrSold = None
+        deltaAnnSavings = None
+        deltaValPwrSaved = None
+        deltaValPwrSold = None
+        deltaMonSavings = None
+           
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric('Total Yearly Solar Power Generated',str(int(round(dfResultDisp['Solar Gen (kw)'].sum(),0)))+' kwh',delta=None)
-        st.metric('Power Saved',str(int(round(dfResultDisp['Power Saved'].sum(),0)))+' kwh',delta=None)
-        st.metric('Power Sold',str(int(round(dfResultDisp['Power Sold'].sum(),0)))+' kwh',delta=None)
+        st.metric('Total Yearly Solar Power Generated',str(int(round(dfResultDisp['Solar Gen (kw)'].sum(),0)))+' kwh',delta=deltaPwrGen)
+        st.metric('Power Saved',str(int(round(dfResultDisp['Power Saved'].sum(),0)))+' kwh',delta=deltaPwrSaved)
+        st.metric('Power Sold',str(int(round(dfResultDisp['Power Sold'].sum(),0)))+' kwh',delta=deltaPwrSold)
     with col2:
         st.metric('Total Annual Savings',"$" + str(round(Decimal(
-            dfResultDisp['Power Saved Value'].sum() + dfResultDisp['Power Sold Value'].sum()),2)),delta=None)
-        st.metric('Value of Power Saved',"$" + str(round(Decimal(dfResultDisp['Power Saved Value'].sum()),2)),delta=None)
-        st.metric('Value of Power Sold',"$" + str(round(Decimal(dfResultDisp['Power Sold Value'].sum()),2)),delta=None)
+            dfResultDisp['Power Saved Value'].sum() + dfResultDisp['Power Sold Value'].sum()),2)),delta=deltaAnnSavings)
+        st.metric('Value of Power Saved',"$" + str(round(Decimal(dfResultDisp['Power Saved Value'].sum()),2)),delta=deltaValPwrSaved)
+        st.metric('Value of Power Sold',"$" + str(round(Decimal(dfResultDisp['Power Sold Value'].sum()),2)),delta=deltaValPwrSold)
     with col3:
         st.metric('Average Monthly Savings',"$" + str(round(Decimal(
-            (dfResultDisp['Power Saved Value'].sum() + dfResultDisp['Power Sold Value'].sum()) / 12),2)),delta=None)
+            (dfResultDisp['Power Saved Value'].sum() + dfResultDisp['Power Sold Value'].sum()) / 12),2)),delta=deltaMonSavings)
                 
     
     c = alt.Chart(dfResultDisp).mark_bar().encode(
@@ -488,7 +525,6 @@ def RunCaseButton():
     st.session_state.caseCatalog = [x['Case Name'] for x in st.session_state.collectionofCaseData]
     dfActivecase = RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio, 1, 1, 1)
     st.session_state.collectionofCases.append(dfActivecase)
-    #DisplayCase(st.session_state.collectionofCases[st.session_state.caseIndex], (st.session_state.caseIndex)) 
     st.session_state.caseIndex += 1
     st.session_state.displayRunCase = True
 
@@ -535,6 +571,9 @@ with tab1: #Tab 1 is the solar system main calculation tab where results on the 
             compareIndexLookup = st.selectbox('Case to Compare',pd.DataFrame(compareCatalog),
                 index = int(st.session_state.compareCaseIndex), on_change=ResetView, key ='compareChoice')
             st.session_state.compareCaseIndex = st.session_state.caseCatalog.index(compareIndexLookup)
+
+            #Populate the metric deltas
+            #deltaPowerGen = 
                
     if st.session_state.displayRunCase & (len(st.session_state.collectionofCases) > 0):
         DisplayCase(st.session_state.collectionofCases[st.session_state.caseIndex - 1], (st.session_state.caseIndex - 1))

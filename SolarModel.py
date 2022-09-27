@@ -32,7 +32,7 @@ if 'caseCatalog' not in st.session_state:
         st.session_state.caseCatalog = []
 
 if 'compareCaseIndex' not in st.session_state:
-        st.session_state.compareCaseIndex = 1
+        st.session_state.compareCaseIndex = 0
 
 
 #Setup the Streamlit Input
@@ -423,46 +423,50 @@ def DisplayCase (dfDisplayCase, caseIndex):
     st.dataframe(dfCaseDisplay)
     return
 
+def RunCaseButton():
+    caseData = {
+        'Case Number': [st.session_state.caseIndex],
+        'Case Name': [caseName],
+        'City': [location],
+        'Solar System DC Size (kw)': [dcSysSize],
+        'Module Type': [moduleType],
+        'Array Type': [arrayType,],
+        'System Losses (%)': [systemLosses],
+        'Tilt (deg)': [tilt],
+        'Azimuth (deg)' : [azimuth],
+        'Battery Installed' : [batteryInstalled],
+        'Energy Charge ($)': [energyCharge],
+        'Delivery Charge ($)' : [deliveryCharge],
+        'Buy Back Type' : [buyBackType],
+        'Time of Use Features' : [touFeatures]
+    }
+    
+    st.session_state.collectionofCaseData.append(pd.DataFrame(caseData))
+    st.write([x['Case Name'] for x in st.session_state.collectionofCaseData])   #temp debug
+    st.session_state.caseCatalog = [x['Case Name'] for x in st.session_state.collectionofCaseData]
+    dfActivecase = RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio, 1, 1, 1)
+    st.session_state.collectionofCases.append(dfActivecase)
+    #DisplayCase(dfActivecase, st.session_state.caseIndex)
+    
+    st.session_state.caseIndex += 1
+
+
 with tab1: #Tab 1 is the solar system main calculation tab where results on the base solar power system are shown
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        runcasebutton = st.button('Run Case')
+        runcasebutton = st.button('Run Case',on_click=RunCaseButton)
     with col2:
-        if len(st.session_state.collectionofCases) > 0:
-            st.selectbox('View Case',pd.DataFrame(st.session_state.caseCatalog))
-            
+        if len(st.session_state.collectionofCases) > 1:
+            displayIndexLookup = st.selectbox('View Case',pd.DataFrame(st.session_state.caseCatalog), index = int(st.session_state.caseIndex - 1))
+            #displayIndex = st.session_state.caseCatalog.index(displayIndexLookup)
+            #DisplayCase(st.session_state.collectionofCases[displayIndex],displayIndex)
     with col3:
-        if len(st.session_state.collectionofCases) > 0:
-            st.write(st.session_state.caseCatalog)
+        if len(st.session_state.collectionofCases) > 1:
             st.selectbox('Case to Compare',pd.DataFrame(st.session_state.caseCatalog), index = int(st.session_state.compareCaseIndex))
-                
-
-    if runcasebutton:
-        caseData = {
-            'Case Number': [st.session_state.caseIndex],
-            'Case Name': [caseName],
-            'City': [location],
-            'Solar System DC Size (kw)': [dcSysSize],
-            'Module Type': [moduleType],
-            'Array Type': [arrayType,],
-            'System Losses (%)': [systemLosses],
-            'Tilt (deg)': [tilt],
-            'Azimuth (deg)' : [azimuth],
-            'Battery Installed' : [batteryInstalled],
-            'Energy Charge ($)': [energyCharge],
-            'Delivery Charge ($)' : [deliveryCharge],
-            'Buy Back Type' : [buyBackType],
-            'Time of Use Features' : [touFeatures]
-        }
-        st.session_state.collectionofCaseData.append(pd.DataFrame(caseData))
-        st.session_state.caseCatalog = [x['Case Name'] for x in st.session_state.collectionofCaseData]
-        dfActivecase = RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio, 1, 1, 1)
-        st.session_state.collectionofCases.append(dfActivecase)
-        DisplayCase(dfActivecase, st.session_state.caseIndex)
-
-        st.session_state.caseIndex += 1
-        
+               
+    if st.session_state.caseIndex > 0 & runcasebutton:
+        DisplayCase(st.session_state.collectionofCases[st.session_state.caseIndex - 1], (st.session_state.caseIndex - 1))  
         
         
 with tab2: #Tab2 is for the NPV inputs and to calculate and display NPV data

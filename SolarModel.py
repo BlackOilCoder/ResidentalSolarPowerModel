@@ -60,10 +60,14 @@ st.sidebar.title('User Input')
 caseName = st.sidebar.text_input('Case Name',value='Case 1',help='Enter a name for the modeled scenario', on_change=ResetView)
 location = st.sidebar.selectbox('City',['Austin','Dallas','Houston','Midland','San Antonio'],index=2, on_change=ResetView)
 avgMonthElecConsump = st.sidebar.number_input('Average Monthly Electricity Consumption (kwh)',min_value=0, max_value=20000,value=1500,step=100, on_change=ResetView)
+homeEffChoices = {5: "Poor", 4: "Average", 3: "Good", 1: "Great"}
+def format_func_eff(option):
+    return homeEffChoices[option]
+homeEffType = st.sidebar.selectbox('Home Efficiency',options=list(homeEffChoices.keys()),format_func=format_func_eff,index=1, on_change=ResetView)
 
 #Solar System Input
 with st.sidebar.expander("Solar System Description",expanded = True):
-    dcSysSize = st.number_input('DC System Size (kW)',min_value=(0),max_value=(50),value=8, on_change=ResetView)
+    dcSysSize = st.number_input('DC System Size (kW)',min_value=(0.1),max_value=(50.0),value=8.0, step=1.0,on_change=ResetView)
 
     moduleTypeChoices = {0: "Standard", 2: "Premium", 3: "Thin Film"}
     def format_func_mod(option):
@@ -110,7 +114,9 @@ with st.sidebar.expander("Solar System Description",expanded = True):
     if batteryInstalled:
         batterySize = st.number_input('Battery Size (kwh)',min_value=(0.1), max_value=(500.0),value=13.5,step=0.1, on_change=ResetView)
         roundTripEff = st.number_input('Round Trip Efficiency (%)',min_value=(0.0),max_value=(100.0),value=92.5,step=0.1, on_change=ResetView)
-
+    else:
+        batterySize = 0
+        roundTripEff = 0
 
 #Electric Conctract Setup
 with st.sidebar.expander("Electricity Plan Details",expanded = True):
@@ -151,8 +157,6 @@ with st.sidebar.expander("Electricity Plan Details",expanded = True):
         wkendDayEnd = 'Monday'
         wkendTimeStart = datetime.time(20,0)
  
-
-
 #NREL request building
 @st.cache
 def GetNRELData(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio):
@@ -164,7 +168,7 @@ def GetNRELData(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, 
     df=pd.json_normalize(response.json(),max_level=1)
     return df
 
-@st.cache
+#@st.cache
 def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azimuth, dcToACRatio, inverterEff, groundCovRatio, year, energyInf, panelDeg):
     global dfActivecase
     #fetch NREL solar data
@@ -181,6 +185,8 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
     dfResMonDelta = pd.DataFrame()
     #   Read in baked data that has the estimate delta to the annual average consumption on a monthly basis
     dfResMonDelta = pd.DataFrame(pd.read_csv('ResidentalMonthlyDelta2Mean.csv'))
+    dfResMonDelta['MonthDays'] = pd.to_datetime(dfResMonDelta['MonthNum']).dt.daysinmonth
+    dfResMonDelta['AvgMonthConsump'] = avgMonthElecConsump
     dfResMonDelta['Monthly Consumption'] = dfResMonDelta['Delta2YrlyMean']*avgMonthElecConsump+avgMonthElecConsump
 
     #Calculate estimated monthly power usage from annual average and populate active case dataframe
@@ -205,8 +211,8 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
     dfERCOTHourly['MonthDays'] = pd.to_datetime(dfERCOTHourly['Month']).dt.daysinmonth
     #   Look up the monthly consumption data and apply it to all rows in that month for later calculation of hourly consumption
     dfERCOTHourly['Monthly Pwr Consumption (kwh)'] = dfERCOTHourly['Month'].map(dfResMonDelta['Monthly Consumption'])
-    dfERCOTHourly[ZoneLocation] = 1 + dfERCOTHourly[ZoneLocation]
-    dfERCOTHourly['Hourly Pwr Consumption (kwh)'] = dfERCOTHourly[ZoneLocation] * dfERCOTHourly['Monthly Pwr Consumption (kwh)'] / dfERCOTHourly['MonthDays'] / 24
+    dfERCOTHourly[ZoneLocation] = 1 + dfERCOTHourly[ZoneLocation] * homeEffType
+    dfERCOTHourly['Hourly Pwr Consumption (kwh)'] = dfERCOTHourly[ZoneLocation] * dfERCOTHourly['Monthly Pwr Consumption (kwh)'] / dfERCOTHourly['MonthDays'] / 24 
     #   Merge the ERCOT Hourly by day of week data to the activecase dataframe to map the monthly day of week consumptions to a yearly datum
     #  - i.e. all weekdays in the same month have the same consumption profile
     #   drop the unused Month and Hour columns
@@ -249,7 +255,7 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
             if dfActivecase.loc[i-1,'Battery Storage'] + dfActivecase.loc[i,'Battery Delta Energy (kwh)'] <= 0:
                 dfActivecase.loc[i,'Battery Storage'] = 0
             elif dfActivecase.loc[i-1,'Battery Storage'] + dfActivecase.loc[i,'Battery Delta Energy (kwh)'] < batterySize:
-                dfActivecase.loc[i,'Battery Storage'] = dfActivecase.loc[i-1,'Battery Storage'] + (dfActivecase.loc[i,'Battery Delta Energy (kwh)'] * roundTripEff/100)
+                dfActivecase.loc[i,'Battery Storage'] = dfActivecase.loc[i-1,'Battery Storage'] + (dfActivecase.loc[i,'Battery Delta Energy (kwh)'] / (roundTripEff/100))
             elif dfActivecase.loc[i-1,'Battery Storage'] + dfActivecase.loc[i,'Battery Delta Energy (kwh)'] > batterySize:
                 dfActivecase.loc[i,'Battery Storage'] = batterySize
         
@@ -270,18 +276,16 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
         dfActivecase['Power Sold - Battery'] = np.select(conditions,values)
 
     #Calculate time of use (TOU) power saved if electrical plan features include
-    dfActivecase['Pwr Saved - TOU'] = 0 # initialize power saved column to 0 for ease of future NPV calcs (always have the data available even if at 0)
+    dfActivecase['Pwr Saved - TOU'] = 0 # initialize power saved column to 0 so only conditions that affect TOU modify from 0 values
     #Calculate TOU power if battery is installed - which needs to account for the power saved by the battery - but only if it has available energy.
     if batteryInstalled:
         if touFeatures == 'Free Nights' or touFeatures == 'Reduced Cost Nights':
             conditions = [
                 ((dfActivecase['HourNum']>=nightStart.hour) | (dfActivecase['HourNum'] < nightEnd.hour) &
-                    (dfActivecase['Battery Storage'] > dfActivecase['Hourly Pwr Consumption (kwh)'])),
-                ((dfActivecase['HourNum']>=nightStart.hour) | (dfActivecase['HourNum'] < nightEnd.hour) &
-                    (dfActivecase['Battery Storage'] <= dfActivecase['Hourly Pwr Consumption (kwh)']))
+                    ((dfActivecase['Hourly Pwr Consumption (kwh)'] - dfActivecase['Power Saved - Solar'] - dfActivecase['Power Saved - Battery'] + dfActivecase['Power Sold - Battery']) > 0))
             ]
-            value = [dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar']),
-                dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar']).sub(dfActivecase['Power Saved - Battery'])
+            value = [
+                dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar']).sub(dfActivecase['Power Saved - Battery'].add(dfActivecase['Power Sold - Battery']))
             ]
             dfActivecase['Pwr Saved - TOU'] = np.select(conditions,value)
         
@@ -292,15 +296,10 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
                     (dfActivecase['Week Day #'] > wkendDayStart) |
                     (dfActivecase['Week Day #'] < wkendDayEnd) |
                     ((dfActivecase['Week Day #'] == wkendDayEnd) & (dfActivecase['HourNum']< wkendTimeEnd.hour) &
-                    (dfActivecase['Battery Storage'] > dfActivecase['Hourly Pwr Consumption (kwh)'])),
-                ((dfActivecase['Week Day #'] == wkendDayStart) & (dfActivecase['HourNum']>=wkendTimeStart.hour)) |
-                    (dfActivecase['Week Day #'] > wkendDayStart) |
-                    (dfActivecase['Week Day #'] < wkendDayEnd) |
-                    ((dfActivecase['Week Day #'] == wkendDayEnd) & (dfActivecase['HourNum']< wkendTimeEnd.hour) &
-                    (dfActivecase['Battery Storage'] <= dfActivecase['Hourly Pwr Consumption (kwh)'])),
+                    ((dfActivecase['Hourly Pwr Consumption (kwh)'] - dfActivecase['Power Saved - Solar'] - dfActivecase['Power Saved - Battery'] + dfActivecase['Power Sold - Battery']) > 0)),
             ]
-            value = [dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar']),
-                dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar']).sub(dfActivecase['Power Saved - Battery'])
+            value = [
+                dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar']).sub(dfActivecase['Power Saved - Battery'].add(dfActivecase['Power Sold - Battery']))
             ]
             dfActivecase['Pwr Saved - TOU'] = np.select(conditions,value)
             dfActivecase.drop('Week Day #', axis=1, inplace = True)
@@ -313,16 +312,10 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
                     (dfActivecase['Week Day #'] < wkendDayEnd) |
                     ((dfActivecase['Week Day #'] == wkendDayEnd) & (dfActivecase['HourNum']< wkendTimeEnd.hour)) |
                     ((dfActivecase['HourNum']>=nightStart.hour) | (dfActivecase['HourNum'] < nightEnd.hour) &
-                    (dfActivecase['Battery Storage'] > dfActivecase['Hourly Pwr Consumption (kwh)'])),
-                ((dfActivecase['Week Day #'] == wkendDayStart) & (dfActivecase['HourNum']>=wkendTimeStart.hour)) |
-                    (dfActivecase['Week Day #'] > wkendDayStart) |
-                    (dfActivecase['Week Day #'] < wkendDayEnd) |
-                    ((dfActivecase['Week Day #'] == wkendDayEnd) & (dfActivecase['HourNum']< wkendTimeEnd.hour)) |
-                    ((dfActivecase['HourNum']>=nightStart.hour) | (dfActivecase['HourNum'] < nightEnd.hour) &
-                    (dfActivecase['Battery Storage'] <= dfActivecase['Hourly Pwr Consumption (kwh)'])),
+                    ((dfActivecase['Hourly Pwr Consumption (kwh)'] - dfActivecase['Power Saved - Solar'] - dfActivecase['Power Saved - Battery'] + dfActivecase['Power Sold - Battery']) > 0)),
             ]
-            value = [dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar']),
-                dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar']).sub(dfActivecase['Power Saved - Battery'])
+            value = [
+                dfActivecase['Hourly Pwr Consumption (kwh)'].sub(dfActivecase['Power Saved - Solar']).sub(dfActivecase['Power Saved - Battery'].add(dfActivecase['Power Sold - Battery']))
             ]
             dfActivecase['Pwr Saved - TOU'] = np.select(conditions,value)
             dfActivecase.drop('Week Day #', axis=1, inplace = True)
@@ -360,13 +353,13 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
             dfActivecase['Pwr Saved - TOU'] = np.select(conditions,value)
             dfActivecase.drop('Week Day #', axis=1, inplace = True)
     
-    #Calculate the value of power saved - either with just solar or solar + battery
-    if batteryInstalled:
-        dfActivecase['Power Saved Value'] = dfActivecase['Power Saved - Solar'].add(dfActivecase['Power Saved - Battery']) * (energyCharge + deliveryCharge)
-    else:
-        dfActivecase['Power Saved Value'] = dfActivecase['Power Saved - Solar'] * (energyCharge + deliveryCharge)
+    #Calculate the value of power saved - either with just solar or solar + battery - CAN REMOVE IF THIS WORKS
+    #if batteryInstalled:
+    #    dfActivecase['Power Saved Value'] = dfActivecase['Power Saved - Solar'].add(dfActivecase['Power Saved - Battery']) * (energyCharge + deliveryCharge)
+    #else:
+    #    dfActivecase['Power Saved Value'] = dfActivecase['Power Saved - Solar'] * (energyCharge + deliveryCharge)
     
-    #Calculate the vaolume of power sold
+    #Calculate the value of power sold - NEED TO UPDATE TO NOT LET SELL MORE POWER THAN USED IN MONTH
     if buyBackType == 'Net Credit':
         dfActivecase['Pwr Sold Value - Solar'] = dfActivecase['Power Sold - Solar'] * (energyCharge)
         if batteryInstalled:
@@ -380,19 +373,25 @@ def RunCase(location, dcSysSize, moduleType, arrayType, systemLosses, tilt, azim
 
         dfActivecase.drop('RTM Price', axis=1, inplace = True)
 
-    #Summarize the Power Saved and Power Sold columns
+    #Summarize the Power Saved and Power Sold columns based on system type and calculate the value of the power saved for solar system and TOU features
     if batteryInstalled:
+        dfActivecase['Power Saved - Solar System'] = dfActivecase['Power Saved - Battery'].add(dfActivecase['Power Saved - Solar'])
+        dfActivecase['Power Saved Value - Solar System'] = dfActivecase['Power Saved - Solar'].add(dfActivecase['Power Saved - Battery']) * (energyCharge + deliveryCharge)
         dfActivecase['Power Sold Value'] = dfActivecase['Pwr Sold Value - Battery']
-        dfActivecase['Power Saved'] = dfActivecase['Power Saved - Battery'] + dfActivecase['Power Saved - Solar']
         dfActivecase['Power Sold'] = dfActivecase['Power Sold - Battery']
+        dfActivecase['Power Saved TOU Value'] = dfActivecase['Pwr Saved - TOU']*(energyCharge)
+
         dfActivecase = dfActivecase.drop(['Pwr Sold Value - Solar','Pwr Sold Value - Battery'], axis =1)
         dfActivecase = dfActivecase.drop(['Power Saved - Solar','Power Saved - Battery'], axis = 1)
         dfActivecase = dfActivecase.drop(['Power Sold - Solar', 'Power Sold - Battery'], axis = 1)
 
     else:
+        dfActivecase['Power Saved - Solar System'] = dfActivecase['Power Saved - Solar']
+        dfActivecase['Power Saved Value - Solar System'] = dfActivecase['Power Saved - Solar'] * (energyCharge + deliveryCharge)
         dfActivecase['Power Sold Value'] = dfActivecase['Pwr Sold Value - Solar']
-        dfActivecase['Power Saved'] = dfActivecase['Power Saved - Solar']
         dfActivecase['Power Sold'] = dfActivecase['Power Sold - Solar']
+        dfActivecase['Power Saved TOU Value'] = dfActivecase['Pwr Saved - TOU']*(energyCharge)
+        
         dfActivecase = dfActivecase.drop('Pwr Sold Value - Solar', axis =1)
         dfActivecase = dfActivecase.drop('Power Saved - Solar', axis = 1)
         dfActivecase = dfActivecase.drop('Power Sold - Solar', axis = 1)
@@ -412,62 +411,99 @@ def DisplayViewCase():
 
 def DisplayCase (dfDisplayCase, caseIndex):
     dfResultDisp = pd.DataFrame()
-    dfResultDisp = dfDisplayCase.groupby(['MonthNum'], as_index=False)[
-        'Solar Gen (kw)','Power Saved','Power Sold','Power Sold Value', 'Power Saved Value'
-        ].sum()
+    dfResultDisp = dfDisplayCase.groupby(['MonthNum'], as_index=False)[[
+        'Solar Gen (kw)','Power Saved - Solar System','Power Saved Value - Solar System','Power Sold',
+            'Power Sold Value', 'Pwr Saved - TOU', 'Power Saved TOU Value'
+        ]].sum()
     d = dict(enumerate(calendar.month_abbr))
     dfResultDisp['Month'] = dfResultDisp['MonthNum'].map(d)
 
     #Setup metrics for comparing cases
+        #Calculate deltas if more than one case has been run
     if len(st.session_state.collectionofCases) > 1:
         dfCompareCase  = st.session_state.collectionofCases[st.session_state.compareCaseIndex]
         
         deltaPwrGen = str(round((dfResultDisp['Solar Gen (kw)'].sum() - dfCompareCase['Solar Gen (kw)'].sum())/
             (min(dfResultDisp['Solar Gen (kw)'].sum(),dfCompareCase['Solar Gen (kw)'].sum()))*100,1))+'%'
         
-        deltaPwrSaved = str(round((dfResultDisp['Power Saved'].sum() - dfCompareCase['Power Saved'].sum())/
-            (min(dfResultDisp['Power Saved'].sum(),dfCompareCase['Power Saved'].sum()))*100,1))+'%'
+        deltaPwrSaved = str(round((dfResultDisp['Power Saved - Solar System'].sum() - dfCompareCase['Power Saved - Solar System'].sum())/
+            (min(dfResultDisp['Power Saved - Solar System'].sum(),dfCompareCase['Power Saved - Solar System'].sum()))*100,1))+'%'
         
         deltaPwrSold = str(round((dfResultDisp['Power Sold'].sum() - dfCompareCase['Power Sold'].sum())/
             (min(dfResultDisp['Power Sold'].sum(),dfCompareCase['Power Sold'].sum()))*100,1))+'%'
 
-        annualSavingsDisp = dfResultDisp['Power Saved Value'].sum() + dfResultDisp['Power Sold Value'].sum()
-        annualSavingsComp = dfCompareCase['Power Saved Value'].sum() + dfCompareCase['Power Sold Value'].sum()
+        annualSavingsDisp = dfResultDisp['Power Saved Value - Solar System'].sum() + dfResultDisp['Power Sold Value'].sum()
+        annualSavingsComp = dfCompareCase['Power Saved Value - Solar System'].sum() + dfCompareCase['Power Sold Value'].sum()
         deltaAnnSavings = str(round((annualSavingsDisp - annualSavingsComp)/
             (min(annualSavingsDisp,annualSavingsComp))*100,1))+'%'
 
-        deltaValPwrSaved = str(round((dfResultDisp['Power Saved Value'].sum() - dfCompareCase['Power Saved Value'].sum())/
-            (min(dfResultDisp['Power Saved Value'].sum(),dfCompareCase['Power Saved Value'].sum()))*100,1))+'%'
+        deltaValPwrSaved = str(round((dfResultDisp['Power Saved Value - Solar System'].sum() - dfCompareCase['Power Saved Value - Solar System'].sum())/
+            (min(dfResultDisp['Power Saved Value - Solar System'].sum(),dfCompareCase['Power Saved Value - Solar System'].sum()))*100,1))+'%'
 
         deltaValPwrSold = str(round((dfResultDisp['Power Sold Value'].sum() - dfCompareCase['Power Sold Value'].sum())/
             (min(dfResultDisp['Power Sold Value'].sum(),dfCompareCase['Power Sold Value'].sum()))*100,1))+'%'
 
-        monSavingsDisp = dfResultDisp['Power Saved Value'].sum() + dfResultDisp['Power Sold Value'].sum()
-        monSavingsComp = dfCompareCase['Power Saved Value'].sum() + dfCompareCase['Power Sold Value'].sum()
+        monSavingsDisp = dfResultDisp['Power Saved Value - Solar System'].sum() + dfResultDisp['Power Sold Value'].sum()
+        monSavingsComp = dfCompareCase['Power Saved Value - Solar System'].sum() + dfCompareCase['Power Sold Value'].sum()
         deltaMonSavings = str(round((monSavingsDisp - monSavingsComp)/
             (min(monSavingsDisp,monSavingsComp))*100,1))+'%'
+        
+        #Test if either the display or compare case has TOU features and calculate the deltas
+        if ((st.session_state.collectionofCaseData[caseIndex]['Time of Use Features'] != 'None') | 
+            (st.session_state.collectionofCaseData[st.session_state.compareCaseIndex]['Time of Use Features'] != 'None')):
+            
+            deltaPwrSavedTOU = str(round((dfResultDisp['Pwr Saved - TOU'].sum() - dfCompareCase['Pwr Saved - TOU'].sum())/
+            (min(dfResultDisp['Pwr Saved - TOU'].sum(),dfCompareCase['Pwr Saved - TOU'].sum()))*100,1))+'%'
+
+            deltaValPwrSavedTOU = str(round((dfResultDisp['Power Saved TOU Value'].sum() - dfCompareCase['Power Saved TOU Value'].sum())/
+            (min(dfResultDisp['Power Saved TOU Value'].sum(),dfCompareCase['Power Saved TOU Value'].sum()))*100,1))+'%'
+        else:
+            deltaPwrSavedTOU = None
+            deltaValPwrSavedTOU = None
     else:
         deltaPwrGen = None
         deltaPwrSaved = None
+        deltaPwrSavedTOU = None
         deltaPwrSold = None
         deltaAnnSavings = None
         deltaValPwrSaved = None
+        deltaValPwrSavedTOU = None
         deltaValPwrSold = None
         deltaMonSavings = None
-           
+
+    #Call the metrics    
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric('Total Yearly Solar Power Generated',str(int(round(dfResultDisp['Solar Gen (kw)'].sum(),0)))+' kwh',delta=deltaPwrGen)
-        st.metric('Power Saved',str(int(round(dfResultDisp['Power Saved'].sum(),0)))+' kwh',delta=deltaPwrSaved)
+        st.metric('Power Saved - Solar System',str(int(round(dfResultDisp['Power Saved - Solar System'].sum(),0)))+' kwh',delta=deltaPwrSaved)
+
+        #Test if either the display or compare case has TOU feature and display the metric
+        
+        
+        if len(st.session_state.collectionofCases) > 1:
+            if ((st.session_state.collectionofCaseData[caseIndex]['Time of Use Features'] != 'None') | 
+                (st.session_state.collectionofCaseData[st.session_state.compareCaseIndex]['Time of Use Features'] != 'None')):
+        
+                st.metric('Power Saved - TOU',str(int(round(dfResultDisp['Pwr Saved - TOU'].sum(),0)))+' kwh',delta=deltaPwrSavedTOU)
+
         st.metric('Power Sold',str(int(round(dfResultDisp['Power Sold'].sum(),0)))+' kwh',delta=deltaPwrSold)
     with col2:
         st.metric('Total Annual Savings',"$" + str(round(Decimal(
-            dfResultDisp['Power Saved Value'].sum() + dfResultDisp['Power Sold Value'].sum()),2)),delta=deltaAnnSavings)
-        st.metric('Value of Power Saved',"$" + str(round(Decimal(dfResultDisp['Power Saved Value'].sum()),2)),delta=deltaValPwrSaved)
+            dfResultDisp['Power Saved Value - Solar System'].sum() + dfResultDisp['Power Sold Value'].sum()),2)),delta=deltaAnnSavings)
+        st.metric('Value of Power Saved - Solar System',"$" + str(round(Decimal(dfResultDisp['Power Saved Value - Solar System'].sum()),2)),delta=deltaValPwrSaved)
+
+        #Test if either the display or compare case has TOU feature and display the metric
+        if len(st.session_state.collectionofCases) > 1:
+            if ((st.session_state.collectionofCaseData[caseIndex]['Time of Use Features'] != 'None') | 
+                (st.session_state.collectionofCaseData[st.session_state.compareCaseIndex]['Time of Use Features'] != 'None')):
+                
+                st.metric('Value of Power Saved - TOU',str(int(round(dfResultDisp['Power Saved TOU Value'].sum(),0)))+' kwh',delta=deltaValPwrSavedTOU)
+
         st.metric('Value of Power Sold',"$" + str(round(Decimal(dfResultDisp['Power Sold Value'].sum()),2)),delta=deltaValPwrSold)
+    
     with col3:
         st.metric('Average Monthly Savings',"$" + str(round(Decimal(
-            (dfResultDisp['Power Saved Value'].sum() + dfResultDisp['Power Sold Value'].sum()) / 12),2)),delta=deltaMonSavings)
+            (dfResultDisp['Power Saved Value - Solar System'].sum() + dfResultDisp['Power Sold Value'].sum()) / 12),2)),delta=deltaMonSavings)
                 
     
     c = alt.Chart(dfResultDisp).mark_bar().encode(
@@ -476,8 +512,34 @@ def DisplayCase (dfDisplayCase, caseIndex):
         )    
 
     st.altair_chart(c, use_container_width=True)
+
+    dfGraphData = dfDisplayCase.filter(['Date','Hourly Pwr Consumption (kwh)','Solar Gen (kw)','Power Sold'])
+
+    brush = alt.selection(type='interval', encodings=['x'])
+
+    base = alt.Chart(dfGraphData).mark_line().encode(
+        x = 'Date:T',
+        y = 'Hourly Pwr Consumption (kwh):Q',
+        #y2 = 'Soar Gen (kw):Q'
+        color='dfGraphData:N'
+    )
+
+    upper = base.encode(
+        alt.X('Date:T', scale = alt.Scale(domain=brush))
+    )
+
+    lower = base.properties(
+        height=60
+    ).add_selection(brush)
+
+    st.altair_chart(upper & lower)
+
+
     #Prepare case inputs for display
     dfCaseInputs = pd.DataFrame([st.session_state.collectionofCaseData[caseIndex]])
+    if len(st.session_state.collectionofCases) > 1:
+        dfCompareInputs = pd.DataFrame([st.session_state.collectionofCaseData[st.session_state.compareCaseIndex]])
+        dfCaseInputs = pd.concat([dfCaseInputs,dfCompareInputs])
     dfCaseDisplay = dfCaseInputs.transpose()
     dfCaseDisplay.index.rename('Input Parameters', inplace = True)
     dfCaseDisplay = dfCaseDisplay.rename(columns={0: 'User Inputs'})
@@ -491,24 +553,34 @@ def DisplayCase (dfDisplayCase, caseIndex):
 
 def RunCaseButton():
     st.session_state.displayViewCase = False
+    battInstChoices = {True: "Yes", False: "No"}
+    def format_func_batt(option):
+        return battInstChoices[option]
     caseData = {
         #'Case Number': st.session_state.caseIndex, #doesn't seem to be required at this time
         'Case Name': caseName,
         'City': location,
-        'Annual Monthly Elec Usage (kwh)' : avgMonthElecConsump,
-        'Solar System DC Size (kw)': dcSysSize,
-        'Module Type': moduleType,
-        'Array Type': arrayType,
-        'System Losses (%)': systemLosses,
-        'Tilt (deg)': tilt,
-        'Azimuth (deg)' : azimuth,
-        'Battery Installed' : batteryInstalled,
-        'Energy Charge ($)': energyCharge,
-        'Delivery Charge ($)' : deliveryCharge,
+        'Annual Monthly Elec Usage' : str(avgMonthElecConsump) + ' kWh',
+        'Home Efficency' : format_func_eff(homeEffType),
+        'Solar System DC Size': str(dcSysSize) + ' kW',
+        'Module Type': format_func_mod(moduleType),
+        'Array Type': format_func_array(arrayType),
+        'System Losses': str(systemLosses) + '%',
+        'Tilt': str(tilt) + '°',
+        'Azimuth' : str(azimuth) + '°',
+        'Battery Installed' : format_func_batt(batteryInstalled),
+        'Battery Size' : str(batterySize) + ' kWh',
+        'Battery Round Trip Eff' : str(roundTripEff) + '%',
+        'Energy Charge': '$' + str(round(Decimal(energyCharge),3)),
+        'Delivery Charge' : '$' + str(round(Decimal(deliveryCharge),5)),
         'Buy Back Type' : buyBackType,
         'Time of Use Features' : touFeatures
     }
     
+    if not batteryInstalled:
+        del caseData['Battery Size']
+        del caseData['Battery Round Trip Eff']
+
     #Check if the same case is being accidentlly run twice and skip the work
     if st.session_state.caseIndex > 0:
         if caseData == st.session_state.collectionofCaseData[st.session_state.caseIndex - 1]:           
